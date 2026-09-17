@@ -76,11 +76,29 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Running Jupyter Notebooks
+### 3. Running the Backend API
+The backend exposes the pre-trained Scikit-Learn pipelines via FastAPI:
+```bash
+# From repository root:
+python -m uvicorn backend.main:app --port 8000 --reload
+```
+API Documentation & Swagger UI will be live at: `http://127.0.0.1:8000/docs`
+
+### 4. Running the Frontend Dashboard
+The user interface connects directly to the FastAPI ML endpoints:
+```bash
+# Navigate to frontend and start the Vite dev server:
+cd frontend
+npm install
+npm run dev
+```
+Open `http://localhost:5173` in your browser to interact with live model predictions, comparative benchmark scorecards, and diagnostic plots.
+
+### 5. Running Jupyter Notebooks
 ```bash
 jupyter notebook
 ```
-Navigate to `notebooks/regression/` to explore the experimental workflows.
+Navigate to `notebooks/regression/` to explore the complete step-by-step EDA, pipeline training, diagnostic plots, and viva study notes.
 
 ---
 

@@ -26,8 +26,9 @@ from sklearn.svm import LinearSVR
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
 
-NUMERIC_FEATURES = ['temp', 'atemp', 'hum', 'windspeed']
-CATEGORICAL_FEATURES = ['season', 'yr', 'mnth', 'hr', 'holiday', 'weekday', 'workingday', 'weathersit']
+# weathersit is an ordinal severity scale (1: Clear < 2: Mist < 3: Rain/Snow < 4: Heavy Storm)
+NUMERIC_FEATURES = ['temp', 'atemp', 'hum', 'windspeed', 'weathersit']
+CATEGORICAL_FEATURES = ['season', 'yr', 'mnth', 'hr', 'holiday', 'weekday', 'workingday']
 
 
 def load_dataset(filepath="datasets/bike_sharing.csv"):
@@ -39,7 +40,6 @@ def load_dataset(filepath="datasets/bike_sharing.csv"):
             raise FileNotFoundError(f"Dataset not found at {filepath}")
     
     df = pd.read_csv(filepath)
-    # Drop identifier (instant), date string (dteday), and component counts (casual + registered = cnt)
     drop_cols = ['instant', 'dteday', 'casual', 'registered']
     df = df.drop(columns=[col for col in drop_cols if col in df.columns])
     return df
@@ -53,7 +53,7 @@ def split_data(df, target_col='cnt', test_size=0.2, random_state=42):
 
 
 def build_preprocessor():
-    """Builds a leak-free ColumnTransformer for scaling numbers and encoding categories."""
+    """Builds a leak-free ColumnTransformer for scaling numbers (including ordinal weather) and encoding categories."""
     return ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), NUMERIC_FEATURES),

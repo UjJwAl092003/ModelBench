@@ -519,14 +519,78 @@ export default function App() {
                           <select
                             className="form-control"
                             value={bikeFeatures.weathersit}
-                            onChange={(e) => handleBikeChange('weathersit', e.target.value)}
+                            onChange={(e) => {
+                              const w = parseInt(e.target.value);
+                              handleBikeChange('weathersit', w);
+                              // Auto-adjust atmospheric sensors when heavy rain/storm is selected
+                              if (w === 4) {
+                                setBikeFeatures(prev => ({
+                                  ...prev,
+                                  weathersit: 4,
+                                  hum: Math.max(prev.hum, 0.88),
+                                  windspeed: Math.max(prev.windspeed, 0.45)
+                                }));
+                              }
+                            }}
                           >
-                            <option value={1}>Clear / Few Clouds</option>
-                            <option value={2}>Mist / Cloudy</option>
-                            <option value={3}>Light Rain / Snow</option>
-                            <option value={4}>Heavy Rain / Storm</option>
+                            <option value={1}>Clear / Few Clouds (Fine)</option>
+                            <option value={2}>Mist / Cloudy (Moderate)</option>
+                            <option value={3}>Light Rain / Snow (Adverse)</option>
+                            <option value={4}>Heavy Rain / Storm (Severe)</option>
                           </select>
                         </div>
+                      </div>
+
+                      {/* Environmental Atmosphere Presets */}
+                      <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBikeFeatures(prev => ({
+                              ...prev,
+                              weathersit: 4,
+                              temp: 0.22,
+                              hum: 0.92,
+                              windspeed: 0.55
+                            }));
+                          }}
+                          style={{
+                            fontSize: '0.75rem',
+                            padding: '0.35rem 0.6rem',
+                            backgroundColor: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            color: '#1e40af',
+                            fontWeight: 500
+                          }}
+                        >
+                          ⛈️ Set Severe Storm Sensor Preset (Cold, 92% Hum, Windy)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBikeFeatures(prev => ({
+                              ...prev,
+                              weathersit: 1,
+                              temp: 0.65,
+                              hum: 0.50,
+                              windspeed: 0.20
+                            }));
+                          }}
+                          style={{
+                            fontSize: '0.75rem',
+                            padding: '0.35rem 0.6rem',
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            color: '#475569',
+                            fontWeight: 500
+                          }}
+                        >
+                          ☀️ Set Clear Day Sensor Preset (Warm, 50% Hum)
+                        </button>
                       </div>
                     </>
                   )}
@@ -729,11 +793,15 @@ export default function App() {
                             {prediction.prediction === 1 ? '✓ PURCHASE INTENDED' : '○ BROWSING ONLY'}
                           </span>
                           <span className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e3a8a' }}>
-                            {prediction.probability_percent} Confidence
+                            {prediction.confidence_percent || prediction.probability_percent} Confidence
                           </span>
                         </div>
 
-                        {/* Progress Bar */}
+                        {/* Progress Bar & Probability Breakdown */}
+                        <div style={{ marginTop: '0.5rem', marginBottom: '0.25rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                          <span>Purchase Probability: <strong style={{ color: '#0f172a' }}>{prediction.probability_percent}</strong></span>
+                          <span>Predicted Class: <strong style={{ color: prediction.prediction === 1 ? '#15803d' : '#475569' }}>{prediction.prediction === 1 ? 'Class 1 (Revenue)' : 'Class 0 (No Revenue)'}</strong></span>
+                        </div>
                         <div style={{ width: '100%', height: '10px', backgroundColor: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
                           <div 
                             style={{ 

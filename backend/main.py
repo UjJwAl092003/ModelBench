@@ -169,6 +169,11 @@ def predict(payload: PredictionPayload):
                 "windspeed": float(features.get("windspeed", 0.20))
             }
             pred_bikes = bike_regression.predict_sample(pipe, full_feat)
+            
+            # Weather description for subtitle
+            weather_labels = {1: "Clear Skies", 2: "Mist / Cloudy", 3: "Light Rain / Snow", 4: "Heavy Rain / Storm"}
+            w_desc = weather_labels.get(full_feat["weathersit"], "Standard Weather")
+            
             return {
                 "status": "success",
                 "task_type": "Regression",
@@ -176,7 +181,7 @@ def predict(payload: PredictionPayload):
                 "model_id": m_id,
                 "prediction": pred_bikes,
                 "formatted_result": f"{pred_bikes:,} bikes / hour",
-                "subtitle": f"Estimated hourly rental volume ({m_id})"
+                "subtitle": f"Estimated hourly rental volume ({m_id}) under {w_desc}"
             }
 
         elif ds_id == "online_shoppers":
@@ -213,9 +218,11 @@ def predict(payload: PredictionPayload):
                 "model_id": m_id,
                 "prediction": res["prediction"],
                 "formatted_result": res["label"],
+                "confidence": res["confidence"],
+                "confidence_percent": res["confidence_percent"],
                 "purchase_probability": res["purchase_probability"],
                 "probability_percent": res["probability_percent"],
-                "subtitle": f"Probability of transaction: {res['probability_percent']}"
+                "subtitle": f"Prediction Confidence: {res['confidence_percent']} | Purchase Probability: {res['probability_percent']}"
             }
 
     except Exception as e:

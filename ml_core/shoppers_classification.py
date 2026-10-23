@@ -163,16 +163,23 @@ def train_and_benchmark(X_train, y_train, X_test, y_test):
 def predict_sample(pipeline, feature_dict):
     """Runs single-session inference for online shoppers."""
     sample_df = pd.DataFrame([feature_dict])
-    pred = pipeline.predict(sample_df)[0]
-    prob = 0.5
+    pred = int(pipeline.predict(sample_df)[0])
+    prob_purchase = 0.5
+    confidence = 0.5
+    
     if hasattr(pipeline, "predict_proba"):
-        prob = round(float(pipeline.predict_proba(sample_df)[0][1]), 4)
+        probs = pipeline.predict_proba(sample_df)[0]
+        prob_purchase = round(float(probs[1]), 4)
+        # Confidence is the probability of the PREDICTED class
+        confidence = round(float(probs[pred]), 4)
     
     return {
-        'prediction': int(pred),
+        'prediction': pred,
         'label': 'Purchase Completed (Revenue = True)' if pred == 1 else 'Browsing Only (Revenue = False)',
-        'purchase_probability': prob,
-        'probability_percent': f"{prob * 100:.1f}%"
+        'confidence': confidence,
+        'confidence_percent': f"{confidence * 100:.1f}%",
+        'purchase_probability': prob_purchase,
+        'probability_percent': f"{prob_purchase * 100:.1f}%"
     }
 
 

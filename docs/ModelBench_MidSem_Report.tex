@@ -1,0 +1,186 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{cite}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+\begin{document}
+
+% =========================================================================
+% TITLE & HEADER
+% =========================================================================
+\title{\textbf{\Large ModelBench: A Web-Based Platform for Empirical Machine Learning Model Evaluation and Comparative Performance Benchmarking}\\[0.3em]
+\large \textbf{Mid-Semester Project Progress Report}}
+
+\author{
+    \textbf{Ujjwal Singh} (Roll No: 262IS036) \qquad \textbf{Aryan} (Roll No: 262IS007) \\[0.4em]
+    \normalsize M.Tech I Year (CSE-IS), Semester I \\[0.2em]
+    \normalsize Course: CS801 Computing Lab $\mid$ Course Instructor: Prof. P. Santhi Thilagam \\[0.2em]
+    \normalsize Department of Computer Science and Engineering \\
+    \normalsize National Institute of Technology Karnataka, Surathkal
+}
+\date{\textbf{Evaluation Date:} October 12, 2026}
+
+\maketitle
+\thispagestyle{empty}
+
+\vspace{-1.2em}
+
+% =========================================================================
+% 1. EXECUTIVE SUMMARY & OBJECTIVES
+% =========================================================================
+\section{Project Overview and Objectives}
+\label{sec:overview}
+\textbf{ModelBench} is an interactive, web-based software platform designed for systematic training, evaluation, and side-by-side empirical comparison of classical Machine Learning (ML) algorithms. The project addresses a prevalent challenge in applied machine learning: experimentation across separate, ad-hoc Jupyter notebooks often leads to inconsistent train/test splits, hidden data leakage, and unstandardized metric comparisons. Furthermore, trained models typically remain trapped inside Python scripts, inaccessible to non-technical stakeholders.
+
+ModelBench solves these challenges through a dual-persona design:
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item \textbf{End User Track:} Enables non-technical domain users to input familiar, human-readable features and receive live, formatted target predictions without requiring code execution or preprocessing expertise.
+    \item \textbf{ML Engineer / Researcher Track:} Provides a standardized experimentation harness to benchmark multiple algorithm families on identical, leak-free test partitions, analyze regularization hyperparameter sensitivity, and inspect diagnostic error plots.
+\end{enumerate}
+
+The project is structured around an \textbf{80--90\% ML core} supported by a lightweight, modular web integration layer (FastAPI backend and React 18 single-page dashboard).
+
+% =========================================================================
+% 2. TASKS ACCOMPLISHED (MIDSEM PROGRESS)
+% =========================================================================
+\section{Tasks Accomplished}
+\label{sec:accomplished}
+As of the Mid-Semester milestone, the foundation of the ModelBench platform and the complete first working regression benchmark have been successfully implemented, validated, and integrated.
+
+\subsection{Data Ingestion and Exploratory Data Analysis (EDA)}
+We curated and analyzed the Medical Insurance Economics benchmark dataset ($N = 1,338$ records, 6 features, zero missing values):
+\begin{itemize}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item Statistical profiling revealed high positive skewness in the target variable (\texttt{charges}, range: $\$1,121$ to $\$63,770$, mean: $\$13,270$).
+    \item EDA identified a critical non-linear interaction: smoking increases average annual medical expenses by $\approx 4\times$ ($\$32,050$ vs. $\$8,434$). More importantly, for smokers, a Body Mass Index (BMI) $\ge 30$ (obesity) triggers an exponential cost surge, whereas non-smokers experience only a mild linear rise with BMI.
+\end{itemize}
+
+\subsection{Leak-Free Preprocessing Architecture}
+To guarantee authentic out-of-sample evaluation without data leakage:
+\begin{itemize}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item Data is partitioned into an 80\% training set ($1,070$ rows) and a 20\% test set ($268$ rows, \texttt{random\_state=42}) \textbf{prior} to any feature transformations.
+    \item A Scikit-Learn \texttt{ColumnTransformer} is fit strictly on the training partition ($X_{train}$) and transforms the test partition ($X_{test}$).
+    \item Numerical features (\texttt{age}, \texttt{bmi}, \texttt{children}) are normalized via \texttt{StandardScaler} ($Z$-score normalization: $\mu=0, \sigma=1$).
+    \item Categorical features (\texttt{sex}, \texttt{smoker}, \texttt{region}) are encoded via \texttt{OneHotEncoder(drop='first')} to eliminate perfect multicollinearity (Dummy Variable Trap).
+\end{itemize}
+
+\subsection{Model Exploration and Hyperparameter Tuning}
+Three regression model architectures were implemented and rigorously benchmarked:
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item \textbf{Ordinary Least Squares (OLS) Linear Regression:} Serves as the parametric baseline assuming independent additive contributions: $\hat{y} = \beta_0 + \sum \beta_j x_j$.
+    \item \textbf{Ridge Regression ($L_2$ Regularization):** Minimizes $\text{RSS} + \alpha \sum \beta_j^2$. A hyperparameter grid search across $\alpha \in \{0.01, 0.1, 1.0, 10.0, 100.0\}$ was conducted to evaluate weight shrinkage and bias-variance trade-offs.
+    \item \textbf{Polynomial Ridge Regression ($d=2, \alpha=10.0$):** Quadratic basis expansion capturing interaction terms (e.g., $\text{BMI} \times \text{Smoker}$) regularized with an $L_2$ penalty to control coefficient explosion.
+\end{enumerate}
+
+\subsection{Empirical Benchmarking Results}
+All models were evaluated on the identical 268-sample test partition across Coefficient of Determination ($R^2$), Mean Absolute Error (MAE), and Root Mean Squared Error (RMSE):
+
+\begin{table}[h!]
+\centering
+\small
+\caption{ModelBench Empirical Regression Benchmark Results (Test Partition $N=268$)}
+\label{tab:results}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model Architecture} & \textbf{Train $R^2$} & \textbf{Test $R^2$} & \textbf{Test MAE (\$)} & \textbf{Test RMSE (\$)} & \textbf{Evaluation Verdict} \\
+\midrule
+Linear Regression (OLS) & 0.7417 & 0.7836 & 4,181.19 & 5,796.28 & Baseline (Underfits synergy) \\
+Ridge ($\alpha = 0.01$) & 0.7417 & 0.7836 & 4,181.31 & 5,796.28 & Identical to OLS \\
+Ridge ($\alpha = 0.1$) & 0.7417 & 0.7836 & 4,182.39 & 5,796.34 & Stable weights \\
+Ridge ($\alpha = 1.0$) & 0.7417 & 0.7833 & 4,193.20 & 5,800.46 & Moderate shrinkage \\
+Ridge ($\alpha = 10.0$) & 0.7383 & 0.7791 & 4,300.89 & 5,856.32 & Slight bias increase \\
+Ridge ($\alpha = 100.0$) & 0.6729 & 0.6859 & 5,217.80 & 6,997.74 & Severe underfitting (High Bias) \\
+\textbf{Polynomial Ridge ($d=2, \alpha=10$)} & \textbf{0.8407} & \textbf{0.8656} & \textbf{2,836.88} & \textbf{4,568.56} & \textbf{Optimal Performance ($+8.2\% R^2$)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Empirical Insight:} Incorporating the non-linear interaction terms increased explained variance by $+8.2\%$ ($R^2 = 86.56\%$), reduced mean absolute error by $\$1,344.31$ (a $32\%$ error reduction), and suppressed large residual penalties (RMSE reduced by $\$1,227.72$).
+
+\subsection{Diagnostic Error Analysis}
+Scatter plots of Actual vs. Predicted values and residual histograms revealed that OLS Linear Regression systematically underpredicts high-cost cases (heteroscedastic fan pattern). In contrast, Polynomial Ridge predictions tightly cluster along the ideal $y=x$ reference line with stabilized residual variance.
+
+\subsection{Modular Web Integration and Platform Architecture}
+\begin{itemize}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item \textbf{ML Core (\texttt{ml\_core/insurance\_regression.py}):} Pure, reusable Scikit-Learn pipelines decoupled from web dependencies.
+    \item \textbf{FastAPI Backend (\texttt{backend/main.py}):} Loads the dataset and fits pipelines once at server startup, enabling sub-millisecond inference ($<2$ ms). Internal handling assigns baseline reference values for geographic region, presenting only 5 intuitive inputs (\texttt{age}, \texttt{sex}, \texttt{bmi}, \texttt{children}, \texttt{smoker}) to end users.
+    \item \textbf{React Frontend (\texttt{frontend/src/App.jsx}):} A clean 3-tab workbench supporting: (1) Live Model Prediction, (2) Model Comparison Scorecard, and (3) Dataset Insights \& Diagnostic Scatter Plots.
+\end{itemize}
+
+% =========================================================================
+% 3. TASKS YET TO BE COMPLETED (NEXT MILESTONES)
+% =========================================================================
+\section{Tasks Yet to Be Completed}
+\label{sec:remaining}
+For the second half of the semester (Continuous Evaluation 2 and End-Semester Evaluation), the following modules will be developed:
+
+\subsection{Phase 2: Classification Benchmark Engine (CE-2 Milestone)}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item \textbf{Dataset Acquisition and Preprocessing:} Ingestion of a real-world classification dataset (e.g., Telco Customer Churn, $N \approx 7,000$ or Bank Loan Default Risk). Implementation of class imbalance inspection and stratified splitting.
+    \item \textbf{Algorithm Implementation:}
+    \begin{itemize}[leftmargin=*,itemsep=1pt]
+        \item Parametric Baseline: Logistic Regression ($L_1$ Lasso and $L_2$ Ridge penalties).
+        \item Non-Parametric: $K$-Nearest Neighbors (KNN with distance metric tuning).
+        \item Tree-Based Models: Decision Tree Classifier (pruning via \texttt{max\_depth} and \texttt{min\_samples\_split}).
+        \item Ensemble Architectures: Random Forest Classifier (bootstrap aggregation and feature subspace sampling).
+        \item Margin-Based: Support Vector Classifier (Linear and Radial Basis Function RBF kernels).
+    \end{itemize}
+    \item \textbf{Classification Evaluation Metrics:} Precision, Recall, $F_1$-Score, Specificity, Accuracy, and Area Under the ROC Curve (ROC-AUC).
+    \item \textbf{Diagnostic Visualizers:} Interactive Confusion Matrix heatmaps and Receiver Operating Characteristic (ROC) curve overlays.
+\end{enumerate}
+
+\subsection{Phase 3: Automated Hyperparameter Optimization and UI Extensibility (EndSem Milestone)}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item \textbf{Cross-Validated Search Module:} Integrating $k$-fold cross-validation with automated \texttt{GridSearchCV} and \texttt{RandomizedSearchCV} to display hyperparameter sensitivity surfaces.
+    \item \textbf{Multi-Dataset UI Switching:} Upgrading the React frontend with schema-driven dataset selectors, dynamically toggling table columns between regression metrics ($R^2$, MAE) and classification metrics ($F_1$, AUC).
+    \item \textbf{Comprehensive Final Reporting and Verification:} Final benchmarking report comparing classical models against tree ensembles across computational latency, interpretability, and generalization.
+\end{enumerate}
+
+% =========================================================================
+% 4. TEAM CONTRIBUTIONS & PROJECT TIMELINE
+% =========================================================================
+\section{Team Responsibilities and Timeline}
+\label{sec:team}
+
+\subsection{Division of Work}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Ujjwal Singh (262IS036):} Lead on Exploratory Data Analysis, non-linear interaction discovery, Polynomial Feature modeling, Decision Tree and Random Forest implementations, Confusion Matrix diagnostics, and Master Jupyter Notebook maintenance.
+    \item \textbf{Aryan (262IS007):} Lead on leak-free \texttt{ColumnTransformer} pipeline architecture, Ridge regularization experiments, Logistic Regression and SVM implementations, FastAPI backend REST integration, and dynamic schema coordination.
+\end{itemize}
+
+\subsection{Milestone Schedule}
+\begin{table}[h!]
+\centering
+\small
+\caption{ModelBench Project Execution Timeline}
+\label{tab:timeline}
+\begin{tabular}{lll}
+\toprule
+\textbf{Milestone} & \textbf{Target Due Date} & \textbf{Key Deliverables} \\
+\midrule
+Phase 1: Extended Abstract & September 04, 2026 & Problem definition, literature review, LaTeX abstract [Completed] \\
+Phase 2: Continuous Eval 1 & September 21, 2026 & Regression pipeline, leak-free ColumnTransformer, CE-1 PPT [Completed] \\
+\textbf{Phase 3: MidSem Evaluation} & \textbf{October 12, 2026} & \textbf{Live code demonstration, MidSem LaTeX report, PPT deck} \\
+Phase 4: Continuous Eval 2 & November 01, 2026 & Classification engine (Churn/Credit), Decision Trees, Random Forest \\
+Phase 5: EndSem Evaluation & November 10--13, 2026 & Automated GridSearch, multi-dataset UI, comprehensive final report \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+\label{sec:conclusion}
+At the Mid-Semester stage, ModelBench successfully fulfills its defined core objectives for regression experimentation. It demonstrates empirical performance gains ($+8.2\% R^2$) through leak-free polynomial interaction modeling, connects the underlying Scikit-Learn pipelines to a sub-millisecond REST API, and provides an accessible user interface for both domain users and ML researchers. The scheduled roadmap for CE-2 and EndSem will expand the platform into a comprehensive, multi-task benchmark suite.
+
+\end{document}

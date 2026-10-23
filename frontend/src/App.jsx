@@ -1,59 +1,80 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Activity, 
-  BarChart2, 
   Sliders, 
-  Layers, 
-  CheckCircle2, 
-  AlertCircle, 
-  TrendingUp, 
+  BarChart2, 
+  Activity, 
   Database, 
   Cpu, 
-  BookOpen, 
-  ChevronRight,
-  Sparkles,
-  Info
+  CheckCircle2, 
+  AlertCircle, 
+  Play,
+  TrendingUp,
+  Percent,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 
 const API_BASE = '/api';
 
+const DEFAULT_BIKE_FEATURES = {
+  hr: 17,
+  temp: 0.65,
+  hum: 0.50,
+  windspeed: 0.20,
+  season: 3,
+  workingday: 1,
+  weathersit: 1
+};
+
+const DEFAULT_SHOPPERS_FEATURES = {
+  PageValues: 15.0,
+  ProductRelated: 25,
+  ProductRelated_Duration: 800.0,
+  BounceRates: 0.01,
+  ExitRates: 0.03,
+  VisitorType: 'Returning_Visitor',
+  Month: 'Nov',
+  Weekend: 0
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('predict');
   const [datasets, setDatasets] = useState([]);
-  const [selectedDataset, setSelectedDataset] = useState('insurance');
+  const [selectedDataset, setSelectedDataset] = useState('bike_sharing');
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('poly_ridge');
   
-  // Feature input state
-  const [features, setFeatures] = useState({
-    age: 35,
-    sex: 'male',
-    bmi: 28.5,
-    children: 1,
-    smoker: 'no',
-    region: 'southeast'
-  });
-  
+  // Dynamic features based on selected dataset
+  const [bikeFeatures, setBikeFeatures] = useState(DEFAULT_BIKE_FEATURES);
+  const [shoppersFeatures, setShoppersFeatures] = useState(DEFAULT_SHOPPERS_FEATURES);
+
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Data for Comparison and Insights tabs
+  // Data for Comparison and Diagnostics tabs
   const [comparison, setComparison] = useState([]);
   const [insights, setInsights] = useState(null);
   const [diagnostics, setDiagnostics] = useState(null);
 
-  // Load catalog on mount
+  // Load catalog on initial mount
   useEffect(() => {
     fetchDatasets();
-    fetchModels('insurance');
-    fetchComparison('insurance');
-    fetchInsights('insurance');
   }, []);
 
-  // Fetch diagnostics whenever model changes
+  // When selectedDataset changes, update models, comparison, insights
   useEffect(() => {
-    if (selectedModel) {
+    if (selectedDataset) {
+      fetchModels(selectedDataset);
+      fetchComparison(selectedDataset);
+      fetchInsights(selectedDataset);
+      setPrediction(null);
+    }
+  }, [selectedDataset]);
+
+  // Fetch diagnostics whenever model or dataset changes
+  useEffect(() => {
+    if (selectedDataset && selectedModel) {
       fetchDiagnostics(selectedDataset, selectedModel);
     }
   }, [selectedModel, selectedDataset]);
@@ -64,6 +85,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setDatasets(data);
+        if (data.length > 0) {
+          setSelectedDataset(data[0].id);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch datasets:', err);
@@ -77,7 +101,8 @@ export default function App() {
         const data = await res.json();
         setModels(data);
         if (data.length > 0) {
-          setSelectedModel(data[0].id);
+          const best = data.find(m => m.is_best_model) || data[0];
+          setSelectedModel(best.id);
         }
       }
     } catch (err) {
@@ -121,10 +146,23 @@ export default function App() {
     }
   };
 
-  const handleFeatureChange = (name, value) => {
-    setFeatures(prev => ({
+  const handleBikeChange = (name, value) => {
+    setBikeFeatures(prev => ({
       ...prev,
-      [name]: (name === 'age' || name === 'children') ? parseInt(value) || 0 : (name === 'bmi' ? parseFloat(value) || 0 : value)
+      [name]: (name === 'hr' || name === 'season' || name === 'workingday' || name === 'weathersit')
+        ? parseInt(value) || 0
+        : parseFloat(value) || 0
+    }));
+  };
+
+  const handleShoppersChange = (name, value) => {
+    setShoppersFeatures(prev => ({
+      ...prev,
+      [name]: (name === 'ProductRelated' || name === 'Weekend')
+        ? parseInt(value) || 0
+        : (name === 'PageValues' || name === 'ProductRelated_Duration' || name === 'BounceRates' || name === 'ExitRates')
+          ? parseFloat(value) || 0
+          : value
     }));
   };
 
@@ -133,13 +171,14 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
+      const payloadFeatures = selectedDataset === 'bike_sharing' ? bikeFeatures : shoppersFeatures;
       const res = await fetch(`${API_BASE}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dataset_id: selectedDataset,
           model_id: selectedModel,
-          features: features
+          features: payloadFeatures
         })
       });
 
@@ -164,45 +203,50 @@ export default function App() {
     }
   }, [models]);
 
+  const currentDatasetInfo = datasets.find(d => d.id === selectedDataset);
   const currentModelInfo = models.find(m => m.id === selectedModel);
+  const isRegression = selectedDataset === 'bike_sharing';
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <header style={{ backgroundColor: '#ffffff', borderBottom: '1px solid var(--border)', padding: '1rem 0' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
+      
+      {/* Platform Header */}
+      <header style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '1rem 0' }}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ backgroundColor: '#2563eb', color: '#fff', padding: '0.4rem 0.6rem', borderRadius: '0.5rem', fontWeight: 800, fontSize: '1.1rem' }}>
-                MB
-              </div>
-              <div>
-                <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>
-                  ModelBench
-                </h1>
-                <p style={{ fontSize: '0.8125rem', color: '#64748b' }}>
-                  Interactive Machine Learning Benchmarking & Diagnostics Platform
-                </p>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ backgroundColor: '#2563eb', color: '#fff', padding: '0.35rem 0.6rem', borderRadius: '0.375rem', fontWeight: 800, fontSize: '1.1rem' }}>
+              MB
+            </div>
+            <div>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.2, margin: 0 }}>
+                ModelBench
+              </h1>
+              <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: 0 }}>
+                Classical ML Experimentation & Benchmarking (Regression & Classification)
+              </p>
             </div>
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8125rem', color: '#475569' }}>
-            <span className="badge badge-primary">CS801 Computing Lab</span>
-            <span style={{ borderLeft: '1px solid var(--border)', height: '1.25rem' }}></span>
-            <span>Ujjwal Singh (262IS036) & Aryan (262IS007)</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '0.25rem 0.625rem', borderRadius: '9999px', fontWeight: 500 }}>
+              <Database size={13} />
+              10k+ Canonical Datasets
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', backgroundColor: '#ecfdf5', color: '#059669', padding: '0.25rem 0.625rem', borderRadius: '9999px', fontWeight: 500 }}>
+              <span style={{ width: '6px', height: '6px', backgroundColor: '#10b981', borderRadius: '50%' }}></span>
+              Classical ML Active
+            </span>
           </div>
         </div>
       </header>
 
       {/* Navigation Tabs */}
-      <div style={{ backgroundColor: '#ffffff', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0' }}>
         <div className="container" style={{ display: 'flex', gap: '2rem', overflowX: 'auto' }}>
           {[
-            { id: 'predict', label: 'Live Prediction (What-If)', icon: Sliders },
-            { id: 'comparison', label: 'Model Comparison Scorecard', icon: BarChart2 },
-            { id: 'insights', label: 'Dataset Insights & Diagnostics', icon: Activity },
-            { id: 'architecture', label: 'ML Methodology & Viva Guide', icon: BookOpen },
+            { id: 'predict', label: 'Model Prediction', icon: Sliders },
+            { id: 'comparison', label: 'Model Comparison', icon: BarChart2 },
+            { id: 'diagnostics', label: 'Diagnostics & Insights', icon: Activity },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -221,6 +265,7 @@ export default function App() {
                   border: 'none',
                   borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
                   background: 'none',
+                  cursor: 'pointer',
                   whiteSpace: 'nowrap'
                 }}
               >
@@ -233,20 +278,20 @@ export default function App() {
       </div>
 
       {/* Main Content Area */}
-      <main className="container" style={{ flex: 1, padding: '2rem 1.5rem' }}>
+      <main className="container" style={{ flex: 1, padding: '1.75rem 1.5rem' }}>
         
         {/* ========================================================================= */}
-        {/* TAB 1: LIVE PREDICTION & WHAT-IF ANALYSIS */}
+        {/* TAB 1: MODEL PREDICTION */}
         {/* ========================================================================= */}
         {activeTab === 'predict' && (
           <div>
-            {/* Top Selection Controls */}
+            {/* Dataset & Model Selection Bar */}
             <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: '#ffffff' }}>
               <div className="grid-2">
                 <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>
+                  <label className="form-label" style={{ fontWeight: 600, color: '#334155' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                      <Database size={15} color="#2563eb" /> Select Benchmark Dataset
+                      <Database size={15} color="#2563eb" /> Select Problem Dataset
                     </span>
                   </label>
                   <select
@@ -256,19 +301,19 @@ export default function App() {
                   >
                     {datasets.map(d => (
                       <option key={d.id} value={d.id}>
-                        {d.name} ({d.domain} — {d.sample_count} rows)
+                        {d.name} ({d.sample_count.toLocaleString()} rows · {d.task_type})
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>
+                  <label className="form-label" style={{ fontWeight: 600, color: '#334155' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                       <Cpu size={15} color="#2563eb" /> Select ML Algorithm
                     </span>
                     {currentModelInfo?.is_best_model && (
-                      <span className="badge badge-success">Recommended (R² = 0.8656)</span>
+                      <span className="badge badge-success">Top Benchmark</span>
                     )}
                   </label>
                   <select
@@ -278,7 +323,7 @@ export default function App() {
                   >
                     {models.map(m => (
                       <option key={m.id} value={m.id}>
-                        {m.name} [Test R²: {m.test_r2}]
+                        {m.name} {isRegression ? `[R²: ${m.test_r2}]` : `[Acc: ${m.test_acc}]`}
                       </option>
                     ))}
                   </select>
@@ -286,202 +331,410 @@ export default function App() {
               </div>
 
               {currentModelInfo && (
-                <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', fontSize: '0.8125rem', color: '#475569', display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                  <Info size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
-                  <div>
-                    <strong>{currentModelInfo.name}:</strong> {currentModelInfo.description}
+                <div style={{ marginTop: '0.875rem', padding: '0.75rem 1rem', backgroundColor: '#f8fafc', borderRadius: '0.375rem', fontSize: '0.8125rem', color: '#475569', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span><strong>Architecture:</strong> {currentModelInfo.family} ({currentModelInfo.name})</span>
+                    {isRegression ? (
+                      <span className="mono">Test R²: <strong>{currentModelInfo.test_r2}</strong> | Test MAE: <strong>{currentModelInfo.test_mae} bikes</strong></span>
+                    ) : (
+                      <span className="mono">Test Acc: <strong>{currentModelInfo.test_acc}</strong> | F1-Score: <strong>{currentModelInfo.f1}</strong> | ROC-AUC: <strong>{currentModelInfo.roc_auc}</strong></span>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Prediction Form & Result Display */}
+            {/* Input Form & Live Prediction Output */}
             <div className="grid-2">
-              {/* Left Column: Human-Readable Patient Input Form */}
+              
+              {/* Left Column: Feature Form */}
               <div className="card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
-                  <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>
-                    Patient Health Parameters
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                  <h2 style={{ fontSize: '1.05rem', fontWeight: 600, margin: 0, color: '#0f172a' }}>
+                    Feature Inputs ({isRegression ? 'Hourly Conditions' : 'Session Activity'})
                   </h2>
-                  <span className="badge badge-slate">Human-Readable Inputs</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    {isRegression ? 'Regression Inputs' : 'Classification Inputs'}
+                  </span>
                 </div>
 
                 <form onSubmit={handlePredict}>
-                  {/* Age */}
-                  <div className="form-group">
-                    <div className="form-label">
-                      <span>Age</span>
-                      <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>{features.age} years</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="18"
-                      max="64"
-                      value={features.age}
-                      onChange={(e) => handleFeatureChange('age', e.target.value)}
-                    />
-                  </div>
+                  {/* BIKE SHARING INPUTS */}
+                  {isRegression && (
+                    <>
+                      {/* Hour */}
+                      <div className="form-group">
+                        <div className="form-label">
+                          <span>Hour of Day (0–23)</span>
+                          <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                            {bikeFeatures.hr}:00 ({bikeFeatures.hr >= 12 ? (bikeFeatures.hr === 12 ? '12 PM' : `${bikeFeatures.hr - 12} PM`) : (bikeFeatures.hr === 0 ? '12 AM' : `${bikeFeatures.hr} AM`)})
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="23"
+                          value={bikeFeatures.hr}
+                          onChange={(e) => handleBikeChange('hr', e.target.value)}
+                        />
+                      </div>
 
-                  {/* Sex & Smoker Grid */}
-                  <div className="grid-2" style={{ gap: '1rem' }}>
-                    <div className="form-group">
-                      <label className="form-label">Gender / Sex</label>
-                      <select
-                        className="form-control"
-                        value={features.sex}
-                        onChange={(e) => handleFeatureChange('sex', e.target.value)}
-                      >
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                      </select>
-                    </div>
+                      {/* Temperature & Humidity */}
+                      <div className="grid-2" style={{ gap: '1rem' }}>
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Temperature (Norm)</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {bikeFeatures.temp.toFixed(2)} (~{Math.round(bikeFeatures.temp * 41)}°C)
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.02"
+                            max="1.0"
+                            step="0.02"
+                            value={bikeFeatures.temp}
+                            onChange={(e) => handleBikeChange('temp', e.target.value)}
+                          />
+                        </div>
 
-                    <div className="form-group">
-                      <label className="form-label">
-                        <span>Smoking Status</span>
-                        {features.smoker === 'yes' && <span className="badge badge-warning">High Risk</span>}
-                      </label>
-                      <select
-                        className="form-control"
-                        style={{ borderColor: features.smoker === 'yes' ? '#f59e0b' : 'var(--border)' }}
-                        value={features.smoker}
-                        onChange={(e) => handleFeatureChange('smoker', e.target.value)}
-                      >
-                        <option value="no">Non-Smoker</option>
-                        <option value="yes">Smoker</option>
-                      </select>
-                    </div>
-                  </div>
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Humidity (Norm)</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {Math.round(bikeFeatures.hum * 100)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.0"
+                            max="1.0"
+                            step="0.05"
+                            value={bikeFeatures.hum}
+                            onChange={(e) => handleBikeChange('hum', e.target.value)}
+                          />
+                        </div>
+                      </div>
 
-                  {/* BMI */}
-                  <div className="form-group">
-                    <div className="form-label">
-                      <span>Body Mass Index (BMI)</span>
-                      <span className="mono" style={{ fontWeight: 600, color: features.bmi >= 30 ? '#ef4444' : '#2563eb' }}>
-                        {features.bmi.toFixed(1)} kg/m² {features.bmi >= 30 ? '(Obese)' : '(Normal/Overweight)'}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="15.0"
-                      max="53.0"
-                      step="0.1"
-                      value={features.bmi}
-                      onChange={(e) => handleFeatureChange('bmi', e.target.value)}
-                    />
-                  </div>
+                      {/* Wind Speed & Day Type */}
+                      <div className="grid-2" style={{ gap: '1rem' }}>
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Wind Speed (Norm)</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {bikeFeatures.windspeed.toFixed(2)}
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.0"
+                            max="0.85"
+                            step="0.05"
+                            value={bikeFeatures.windspeed}
+                            onChange={(e) => handleBikeChange('windspeed', e.target.value)}
+                          />
+                        </div>
 
-                  {/* Children & Region Grid */}
-                  <div className="grid-2" style={{ gap: '1rem' }}>
-                    <div className="form-group">
-                      <label className="form-label">Dependents (Children)</label>
-                      <select
-                        className="form-control"
-                        value={features.children}
-                        onChange={(e) => handleFeatureChange('children', e.target.value)}
-                      >
-                        {[0, 1, 2, 3, 4, 5].map(n => (
-                          <option key={n} value={n}>{n} {n === 1 ? 'child' : 'children'}</option>
-                        ))}
-                      </select>
-                    </div>
+                        <div className="form-group">
+                          <label className="form-label">Day Schedule</label>
+                          <select
+                            className="form-control"
+                            value={bikeFeatures.workingday}
+                            onChange={(e) => handleBikeChange('workingday', e.target.value)}
+                          >
+                            <option value={1}>Working Day (Mon-Fri)</option>
+                            <option value={0}>Weekend / Holiday</option>
+                          </select>
+                        </div>
+                      </div>
 
-                    <div className="form-group">
-                      <label className="form-label">Residential Region</label>
-                      <select
-                        className="form-control"
-                        value={features.region}
-                        onChange={(e) => handleFeatureChange('region', e.target.value)}
-                      >
-                        <option value="southeast">Southeast</option>
-                        <option value="southwest">Southwest</option>
-                        <option value="northeast">Northeast</option>
-                        <option value="northwest">Northwest</option>
-                      </select>
-                    </div>
-                  </div>
+                      {/* Season & Weather */}
+                      <div className="grid-2" style={{ gap: '1rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Season</label>
+                          <select
+                            className="form-control"
+                            value={bikeFeatures.season}
+                            onChange={(e) => handleBikeChange('season', e.target.value)}
+                          >
+                            <option value={1}>Spring</option>
+                            <option value={2}>Summer</option>
+                            <option value={3}>Fall (Autumn)</option>
+                            <option value={4}>Winter</option>
+                          </select>
+                        </div>
 
-                  {/* Submit Button */}
+                        <div className="form-group">
+                          <label className="form-label">Weather Condition</label>
+                          <select
+                            className="form-control"
+                            value={bikeFeatures.weathersit}
+                            onChange={(e) => handleBikeChange('weathersit', e.target.value)}
+                          >
+                            <option value={1}>Clear / Few Clouds</option>
+                            <option value={2}>Mist / Cloudy</option>
+                            <option value={3}>Light Rain / Snow</option>
+                            <option value={4}>Heavy Rain / Storm</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ONLINE SHOPPERS INPUTS */}
+                  {!isRegression && (
+                    <>
+                      {/* Page Value Score */}
+                      <div className="form-group">
+                        <div className="form-label">
+                          <span>Page Value Score (Google Analytics)</span>
+                          <span className="mono" style={{ fontWeight: 600, color: shoppersFeatures.PageValues > 0 ? '#166534' : '#2563eb' }}>
+                            {shoppersFeatures.PageValues.toFixed(1)} pts
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.0"
+                          max="80.0"
+                          step="1.0"
+                          value={shoppersFeatures.PageValues}
+                          onChange={(e) => handleShoppersChange('PageValues', e.target.value)}
+                        />
+                        <small style={{ color: '#64748b', fontSize: '0.725rem' }}>
+                          Key indicator: Higher page value strongly correlates with completed checkouts.
+                        </small>
+                      </div>
+
+                      {/* Product Pages & Duration */}
+                      <div className="grid-2" style={{ gap: '1rem' }}>
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Product Pages Viewed</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {shoppersFeatures.ProductRelated} pages
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="1"
+                            max="120"
+                            value={shoppersFeatures.ProductRelated}
+                            onChange={(e) => handleShoppersChange('ProductRelated', e.target.value)}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Browsing Duration</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {Math.round(shoppersFeatures.ProductRelated_Duration)} sec
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="10"
+                            max="3000"
+                            step="50"
+                            value={shoppersFeatures.ProductRelated_Duration}
+                            onChange={(e) => handleShoppersChange('ProductRelated_Duration', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Bounce Rate & Exit Rate */}
+                      <div className="grid-2" style={{ gap: '1rem' }}>
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Bounce Rate</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {(shoppersFeatures.BounceRates * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.0"
+                            max="0.2"
+                            step="0.005"
+                            value={shoppersFeatures.BounceRates}
+                            onChange={(e) => handleShoppersChange('BounceRates', e.target.value)}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <div className="form-label">
+                            <span>Exit Rate</span>
+                            <span className="mono" style={{ fontWeight: 600, color: '#2563eb' }}>
+                              {(shoppersFeatures.ExitRates * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.0"
+                            max="0.2"
+                            step="0.005"
+                            value={shoppersFeatures.ExitRates}
+                            onChange={(e) => handleShoppersChange('ExitRates', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Visitor Type, Month, Weekend */}
+                      <div className="grid-3" style={{ gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Visitor Type</label>
+                          <select
+                            className="form-control"
+                            value={shoppersFeatures.VisitorType}
+                            onChange={(e) => handleShoppersChange('VisitorType', e.target.value)}
+                          >
+                            <option value="Returning_Visitor">Returning</option>
+                            <option value="New_Visitor">New Visitor</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Month</label>
+                          <select
+                            className="form-control"
+                            value={shoppersFeatures.Month}
+                            onChange={(e) => handleShoppersChange('Month', e.target.value)}
+                          >
+                            <option value="Nov">November</option>
+                            <option value="May">May</option>
+                            <option value="Mar">March</option>
+                            <option value="Dec">December</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">Weekend</label>
+                          <select
+                            className="form-control"
+                            value={shoppersFeatures.Weekend}
+                            onChange={(e) => handleShoppersChange('Weekend', e.target.value)}
+                          >
+                            <option value={0}>Weekday</option>
+                            <option value={1}>Weekend</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Predict Button */}
                   <button
                     type="submit"
                     className="btn btn-primary"
                     style={{ width: '100%', marginTop: '0.5rem' }}
                     disabled={loading}
                   >
-                    <Sparkles size={16} />
-                    {loading ? 'Executing ML Pipeline...' : 'Predict Medical Charges'}
+                    <Play size={16} />
+                    {loading ? 'Executing Pipeline Inference...' : `Run ${isRegression ? 'Rental Demand' : 'Purchase Intent'} Prediction`}
                   </button>
                 </form>
 
                 {error && (
-                  <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: '0.5rem', fontSize: '0.875rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: '0.375rem', fontSize: '0.8125rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <AlertCircle size={16} />
                     <span>{error}</span>
                   </div>
                 )}
               </div>
 
-              {/* Right Column: Prediction Output Card & Sensitivity Summary */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Right Column: Prediction Output Card */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {prediction ? (
-                  <div className="card" style={{ border: '2px solid #93c5fd', backgroundColor: '#ffffff', position: 'relative', overflow: 'hidden' }}>
+                  <div className="card" style={{ border: '2px solid #bfdbfe', backgroundColor: '#ffffff', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', backgroundColor: '#2563eb' }}></div>
                     
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                       <div>
-                        <span className="badge badge-primary" style={{ marginBottom: '0.5rem' }}>Live Model Output</span>
-                        <h3 style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>
-                          Estimated Annual Medical Charges
+                        <span className="badge badge-primary" style={{ marginBottom: '0.375rem' }}>Live Model Inference</span>
+                        <h3 style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500, margin: 0 }}>
+                          Target: {currentDatasetInfo?.target_variable}
                         </h3>
                       </div>
                       <span className="mono" style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        ID: {prediction.model_id}
+                        {prediction.model_id}
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1e3a8a', fontFamily: 'var(--font-mono)', margin: '0.5rem 0' }}>
-                      {prediction.formatted_charges}
-                    </div>
-
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
-                      <h4 style={{ fontSize: '0.8125rem', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>
-                        Active Input Configuration:
-                      </h4>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <span className="badge badge-slate">Age: {prediction.input_features.age}</span>
-                        <span className="badge badge-slate">Sex: {prediction.input_features.sex}</span>
-                        <span className="badge badge-slate">BMI: {prediction.input_features.bmi}</span>
-                        <span className="badge badge-slate">Children: {prediction.input_features.children}</span>
-                        <span className={`badge ${prediction.input_features.smoker === 'yes' ? 'badge-warning' : 'badge-slate'}`}>
-                          Smoker: {prediction.input_features.smoker}
-                        </span>
-                        <span className="badge badge-slate">Region: {prediction.input_features.region}</span>
+                    {/* Output Value */}
+                    {isRegression ? (
+                      <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1e3a8a', fontFamily: 'var(--font-mono)', margin: '0.5rem 0' }}>
+                        {prediction.formatted_result}
                       </div>
+                    ) : (
+                      <div style={{ margin: '0.75rem 0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                          <span 
+                            className="badge" 
+                            style={{ 
+                              fontSize: '1rem', 
+                              padding: '0.4rem 0.8rem',
+                              backgroundColor: prediction.prediction === 1 ? '#dcfce7' : '#f1f5f9',
+                              color: prediction.prediction === 1 ? '#15803d' : '#475569'
+                            }}
+                          >
+                            {prediction.prediction === 1 ? '✓ PURCHASE INTENDED' : '○ BROWSING ONLY'}
+                          </span>
+                          <span className="mono" style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e3a8a' }}>
+                            {prediction.probability_percent} Probability
+                          </span>
+                        </div>
+
+                        {/* Probability Progress Bar */}
+                        <div style={{ width: '100%', height: '10px', backgroundColor: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
+                          <div 
+                            style={{ 
+                              width: `${(prediction.purchase_probability || 0) * 100}%`, 
+                              height: '100%', 
+                              backgroundColor: prediction.prediction === 1 ? '#16a34a' : '#3b82f6',
+                              transition: 'width 0.3s ease'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.875rem', marginTop: '0.875rem' }}>
+                      <h4 style={{ fontSize: '0.8125rem', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>
+                        Model Interpretation:
+                      </h4>
+                      <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: 0 }}>
+                        {prediction.subtitle}
+                      </p>
                     </div>
 
-                    <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.5rem', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534', display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534', display: 'flex', gap: '0.5rem' }}>
                       <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
                       <div>
-                        <strong>Leak-Free Pipeline Execution:</strong> Transformed via <code className="mono">ColumnTransformer</code> (StandardScaler + OneHotEncoder) and evaluated using <code className="mono">{prediction.model_name}</code>.
+                        Inferred via leak-free Scikit-Learn pipeline (StandardScaler + OneHotEncoder) with zero data snooping.
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#94a3b8' }}>
-                    Adjust parameters and click Predict to view estimated charges.
+                  <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '220px', color: '#94a3b8' }}>
+                    Select inputs and click Run Prediction to inspect model inference.
                   </div>
                 )}
 
-                {/* What-If Sensitivity Insights Card */}
-                <div className="card">
-                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, marginBottom: '0.75rem', color: '#334155' }}>
-                    💡 What-If Sensitivity Insights
+                {/* Architecture Context Card */}
+                <div className="card" style={{ backgroundColor: '#ffffff' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Sparkles size={15} color="#2563eb" /> ML Engineering Notes
                   </h3>
-                  <ul style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: 1.6, paddingLeft: '1.25rem' }}>
-                    <li><strong>Smoking Impact:</strong> Switching from Non-Smoker to Smoker increases predicted costs by $\approx \$15,000$ to $\$30,000$.</li>
-                    <li><strong>BMI Interaction:</strong> For non-smokers, high BMI causes a slight increase; for smokers, $BMI \ge 30$ triggers an exponential rise.</li>
-                    <li><strong>Model Differences:</strong> Polynomial Regression captures this non-linear interaction naturally, whereas Linear Regression assumes a flat additive slope.</li>
-                  </ul>
+                  <p style={{ fontSize: '0.8125rem', color: '#64748b', lineHeight: 1.5, margin: 0 }}>
+                    {isRegression ? (
+                      <>
+                        <strong>Bike Sharing Demand:</strong> Captures extreme non-linear rush-hour interaction effects. Polynomial Ridge with quadratic expansion (\(d=2\)) achieves <strong>0.9145 R²</strong>, significantly outperforming plain OLS Linear Regression.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Shoppers Intent:</strong> Analyzes high-dimensional browsing session telemetry. Regularized Logistic Regression and Linear SVC achieve ~<strong>88.5% Accuracy</strong> and <strong>0.901 ROC-AUC</strong>, effectively addressing class imbalance without heuristic tree splits.
+                      </>
+                    )}
+                  </p>
                 </div>
               </div>
             </div>
@@ -489,268 +742,425 @@ export default function App() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: MODEL COMPARISON SCORECARD */}
+        {/* TAB 2: MODEL COMPARISON */}
         {/* ========================================================================= */}
         {activeTab === 'comparison' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            
+            {/* Dataset Switcher in Comparison Tab */}
+            <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  Empirical Model Benchmark Scorecard
+                </h2>
+                <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
+                  Standardized 80/20 train-test evaluation on {currentDatasetInfo?.sample_count.toLocaleString()} rows ({currentDatasetInfo?.task_type}).
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>Active Dataset:</span>
+                <select
+                  className="form-control"
+                  style={{ width: 'auto', minWidth: '220px' }}
+                  value={selectedDataset}
+                  onChange={(e) => setSelectedDataset(e.target.value)}
+                >
+                  {datasets.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Benchmark Table */}
             <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>
-                    Empirical Model Comparison Scorecard
-                  </h2>
-                  <p style={{ fontSize: '0.875rem', color: '#64748b' }}>
-                    All models evaluated on identical 80/20 train-test split (268 test samples) with standardized preprocessing.
-                  </p>
-                </div>
-                <span className="badge badge-primary">Standardized Benchmark</span>
-              </div>
-
               <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Machine Learning Algorithm</th>
-                      <th style={{ textAlign: 'center' }}>Train R²</th>
-                      <th style={{ textAlign: 'center' }}>Test R²</th>
-                      <th style={{ textAlign: 'right' }}>Test MAE ($)</th>
-                      <th style={{ textAlign: 'right' }}>Test RMSE ($)</th>
-                      <th style={{ textAlign: 'center' }}>Evaluation Verdict</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparison.map((row, idx) => {
-                      const isBest = row["Model"].includes("Polynomial");
-                      return (
-                        <tr key={idx} style={{ backgroundColor: isBest ? '#f0fdf4' : 'inherit' }}>
-                          <td style={{ fontWeight: isBest ? 700 : 500 }}>
-                            {row["Model"]}
-                            {isBest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Best Benchmark</span>}
-                          </td>
-                          <td className="mono" style={{ textAlign: 'center' }}>{row["Train R²"]}</td>
-                          <td className="mono" style={{ textAlign: 'center', fontWeight: 700, color: isBest ? '#166534' : 'inherit' }}>
-                            {row["Test R²"]}
-                          </td>
-                          <td className="mono" style={{ textAlign: 'right' }}>${row["Test MAE ($)"]?.toLocaleString()}</td>
-                          <td className="mono" style={{ textAlign: 'right' }}>${row["Test RMSE ($)"]?.toLocaleString()}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            {isBest ? (
-                              <span className="badge badge-success">Optimal Performance</span>
-                            ) : (
-                              <span className="badge badge-slate">Linear Baseline</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                {isRegression ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Algorithm</th>
+                        <th>Architecture Family</th>
+                        <th style={{ textAlign: 'center' }}>Train R²</th>
+                        <th style={{ textAlign: 'center' }}>Test R²</th>
+                        <th style={{ textAlign: 'right' }}>Test MAE (bikes)</th>
+                        <th style={{ textAlign: 'right' }}>Test RMSE (bikes)</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparison.map((row, idx) => {
+                        const isBest = row.is_best_model;
+                        return (
+                          <tr key={idx} style={{ backgroundColor: isBest ? '#f0fdf4' : 'inherit' }}>
+                            <td style={{ fontWeight: isBest ? 700 : 500 }}>
+                              {row.name}
+                              {isBest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Champion</span>}
+                            </td>
+                            <td style={{ color: '#64748b', fontSize: '0.8125rem' }}>{row.family}</td>
+                            <td className="mono" style={{ textAlign: 'center' }}>{row.train_r2}</td>
+                            <td className="mono" style={{ textAlign: 'center', fontWeight: 700, color: isBest ? '#166534' : 'inherit' }}>
+                              {row.test_r2}
+                            </td>
+                            <td className="mono" style={{ textAlign: 'right' }}>{row.test_mae}</td>
+                            <td className="mono" style={{ textAlign: 'right' }}>{row.test_rmse}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              {isBest ? (
+                                <span className="badge badge-success">Top Benchmark</span>
+                              ) : (
+                                <span className="badge badge-slate">Evaluated</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Algorithm</th>
+                        <th>Architecture Family</th>
+                        <th style={{ textAlign: 'center' }}>Train Acc</th>
+                        <th style={{ textAlign: 'center' }}>Test Acc</th>
+                        <th style={{ textAlign: 'center' }}>Precision</th>
+                        <th style={{ textAlign: 'center' }}>Recall</th>
+                        <th style={{ textAlign: 'center' }}>F1 Score</th>
+                        <th style={{ textAlign: 'center' }}>ROC-AUC</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparison.map((row, idx) => {
+                        const isBest = row.is_best_model;
+                        return (
+                          <tr key={idx} style={{ backgroundColor: isBest ? '#f0fdf4' : 'inherit' }}>
+                            <td style={{ fontWeight: isBest ? 700 : 500 }}>
+                              {row.name}
+                              {isBest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Champion</span>}
+                            </td>
+                            <td style={{ color: '#64748b', fontSize: '0.8125rem' }}>{row.family}</td>
+                            <td className="mono" style={{ textAlign: 'center' }}>{row.train_acc}</td>
+                            <td className="mono" style={{ textAlign: 'center', fontWeight: 700, color: isBest ? '#166534' : 'inherit' }}>
+                              {row.test_acc}
+                            </td>
+                            <td className="mono" style={{ textAlign: 'center' }}>{row.precision}</td>
+                            <td className="mono" style={{ textAlign: 'center' }}>{row.recall}</td>
+                            <td className="mono" style={{ textAlign: 'center', fontWeight: 600 }}>{row.f1}</td>
+                            <td className="mono" style={{ textAlign: 'center', fontWeight: 700, color: '#2563eb' }}>{row.roc_auc}</td>
+                            <td style={{ textAlign: 'center' }}>
+                              {isBest ? (
+                                <span className="badge badge-success">Top Performer</span>
+                              ) : (
+                                <span className="badge badge-slate">Evaluated</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
 
-            {/* Performance Visualizer Cards */}
-            <div className="grid-3">
-              <div className="card">
-                <div style={{ fontSize: '0.8125rem', color: '#64748b', fontWeight: 600 }}>EXPLAINED VARIANCE (R²)</div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#166534', margin: '0.5rem 0' }}>86.56%</div>
-                <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
-                  Polynomial Ridge explains <strong>+8.2% more variance</strong> than standard OLS Linear Regression.
+            {/* Performance Metric Cards */}
+            {isRegression ? (
+              <div className="grid-3">
+                <div className="card">
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>HIGHEST TEST R²</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#166534', margin: '0.375rem 0' }}>91.45%</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
+                    Polynomial Ridge explains <strong>+52.6% more variance</strong> than standard OLS Linear Regression (38.8%).
+                  </div>
                 </div>
-              </div>
 
-              <div className="card">
-                <div style={{ fontSize: '0.8125rem', color: '#64748b', fontWeight: 600 }}>MEAN ABSOLUTE ERROR (MAE)</div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563eb', margin: '0.5rem 0' }}>$2,836.88</div>
-                <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
-                  Average absolute prediction discrepancy is reduced by <strong>$1,344.31</strong>.
+                <div className="card">
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>LOWEST TEST MAE</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563eb', margin: '0.375rem 0' }}>35.72 bikes</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
+                    Average absolute hourly error drops from 105.4 bikes down to only <strong>35.7 bikes/hour</strong>.
+                  </div>
                 </div>
-              </div>
 
-              <div className="card">
-                <div style={{ fontSize: '0.8125rem', color: '#64748b', fontWeight: 600 }}>ROOT MEAN SQUARED ERROR</div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7c3aed', margin: '0.5rem 0' }}>$4,568.56</div>
-                <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
-                  Large outlier error penalty drops by <strong>$1,227.72</strong> compared to Linear Regression.
+                <div className="card">
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>LOWEST TEST RMSE</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7c3aed', margin: '0.375rem 0' }}>57.19 bikes</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
+                    Outlier peak penalty reduced by <strong>~60%</strong> compared to linear baselines (141.7 bikes).
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="grid-3">
+                <div className="card">
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>HIGHEST TEST ACCURACY</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#166534', margin: '0.375rem 0' }}>88.52%</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
+                    Ridge Regularized Logistic Regression correctly classifies <strong>2,183 of 2,466 test sessions</strong>.
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>HIGHEST ROC-AUC SCORE</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563eb', margin: '0.375rem 0' }}>90.15%</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
+                    Linear SVC and Logistic architectures demonstrate excellent discrimination on imbalanced buyer intent.
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>BALANCED F1 SCORE</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7c3aed', margin: '0.375rem 0' }}>60.67%</div>
+                  <div style={{ fontSize: '0.8125rem', color: '#475569' }}>
+                    Harmonic mean of precision (71.5%) and recall (52.7%) achieved without heuristic tree bagging.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: DATASET INSIGHTS & DIAGNOSTICS */}
+        {/* TAB 3: DIAGNOSTICS & INSIGHTS */}
         {/* ========================================================================= */}
-        {activeTab === 'insights' && (
+        {activeTab === 'diagnostics' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {/* Top Row: Target Skewness & Smoker Discrepancy */}
-            <div className="grid-2">
-              <div className="card">
-                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                  1. Target Variable (`charges`) Distribution
+            
+            {/* Header controls */}
+            <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  Model Diagnostics & Distribution Analysis
                 </h3>
-                <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>
-                  Histogram shows right-skewness with modal peaks above $30k representing smokers.
+                <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
+                  Active Model: <strong>{currentModelInfo?.name}</strong> on {currentDatasetInfo?.name}
                 </p>
-                {insights?.charges_distribution && (
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '140px', paddingTop: '10px' }}>
-                    {insights.charges_distribution.map((bin, i) => {
-                      const maxCount = Math.max(...insights.charges_distribution.map(b => b.count));
-                      const heightPercent = (bin.count / maxCount) * 100;
-                      return (
-                        <div
-                          key={i}
-                          title={`${bin.charge_range}: ${bin.count} patients`}
-                          style={{
-                            flex: 1,
-                            height: `${Math.max(4, heightPercent)}%`,
-                            backgroundColor: i > 12 ? '#ef4444' : '#2563eb',
-                            borderRadius: '2px 2px 0 0',
-                            transition: 'background-color 0.2s'
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                  <span>$1,121 (Min)</span>
-                  <span>$13,270 (Mean)</span>
-                  <span>$63,770 (Max)</span>
-                </div>
               </div>
 
-              <div className="card">
-                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                  2. Impact of Smoking on Medical Expenses
-                </h3>
-                <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>
-                  Smokers incur ~4x higher average annual charges compared to non-smokers.
-                </p>
-                {insights?.smoker_average_charges && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-                    {insights.smoker_average_charges.map((item, idx) => (
-                      <div key={idx}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
-                          <span style={{ fontWeight: 600 }}>{item.status}</span>
-                          <span className="mono" style={{ fontWeight: 700, color: idx === 1 ? '#ef4444' : '#2563eb' }}>
-                            ${item.average_charge.toLocaleString()}
-                          </span>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <select
+                  className="form-control"
+                  style={{ width: 'auto' }}
+                  value={selectedDataset}
+                  onChange={(e) => setSelectedDataset(e.target.value)}
+                >
+                  {datasets.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="form-control"
+                  style={{ width: 'auto' }}
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                >
+                  {models.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* BIKE SHARING DIAGNOSTICS */}
+            {isRegression && (
+              <div className="grid-2">
+                {/* Distribution Histogram */}
+                <div className="card">
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.25rem', color: '#0f172a' }}>
+                    1. Hourly Rental Distribution (`cnt`)
+                  </h3>
+                  <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>
+                    Right-skewed hourly demand histogram across 17,379 observations.
+                  </p>
+                  {insights?.bins && (
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '140px', paddingTop: '10px' }}>
+                      {insights.bins.map((bin, i) => {
+                        const maxCount = Math.max(...insights.bins.map(b => b.count));
+                        const heightPercent = (bin.count / maxCount) * 100;
+                        return (
+                          <div
+                            key={i}
+                            title={`${bin.range} bikes: ${bin.count} hours`}
+                            style={{
+                              flex: 1,
+                              height: `${Math.max(4, heightPercent)}%`,
+                              backgroundColor: i > 12 ? '#f59e0b' : '#2563eb',
+                              borderRadius: '2px 2px 0 0'
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                  {insights?.stats && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+                      <span>Min: {insights.stats.min}</span>
+                      <span>Mean: {insights.stats.mean} bikes/hr</span>
+                      <span>Max: {insights.stats.max} bikes/hr</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actual vs Predicted Scatter */}
+                <div className="card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0, color: '#0f172a' }}>
+                      2. Actual vs. Predicted Scatter
+                    </h3>
+                    <span className="mono" style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Test Set (N=100)
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                    Proximity to the red dashed line indicates perfect estimation fidelity.
+                  </p>
+
+                  {diagnostics?.points && (
+                    <div style={{ height: '160px', border: '1px solid #e2e8f0', borderRadius: '0.375rem', padding: '0.75rem', position: 'relative', backgroundColor: '#f8fafc' }}>
+                      <svg style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                        {/* Diagonal reference line */}
+                        <line x1="0" y1="100%" x2="100%" y2="0" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 4" />
+                        
+                        {/* Scatter points */}
+                        {diagnostics.points.map((pt, i) => {
+                          const maxVal = 850;
+                          const cx = `${Math.min(100, (pt.actual / maxVal) * 100)}%`;
+                          const cy = `${Math.max(0, 100 - (pt.predicted / maxVal) * 100)}%`;
+                          return (
+                            <circle
+                              key={i}
+                              cx={cx}
+                              cy={cy}
+                              r="3.5"
+                              fill="#2563eb"
+                              opacity="0.65"
+                            />
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+                    <span>0 bikes</span>
+                    <span style={{ color: '#ef4444' }}>Dashed Red: Ideal y = x Line</span>
+                    <span>850+ bikes</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ONLINE SHOPPERS DIAGNOSTICS */}
+            {!isRegression && (
+              <div className="grid-2">
+                {/* Class Distribution Bar */}
+                <div className="card">
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.25rem', color: '#0f172a' }}>
+                    1. Target Class Imbalance (`Revenue`)
+                  </h3>
+                  <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1.25rem' }}>
+                    Demonstrates realistic real-world 84.5% non-purchasing vs 15.5% purchasing skew across 12,330 visits.
+                  </p>
+                  
+                  {insights?.class_distribution && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {insights.class_distribution.map((item, idx) => {
+                        const total = 12330;
+                        const pct = ((item.count / total) * 100).toFixed(1);
+                        return (
+                          <div key={idx}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                              <span style={{ fontWeight: 600 }}>{item.label}</span>
+                              <span className="mono" style={{ fontWeight: 700, color: idx === 1 ? '#166534' : '#475569' }}>
+                                {item.count.toLocaleString()} sessions ({pct}%)
+                              </span>
+                            </div>
+                            <div style={{ width: '100%', height: '14px', backgroundColor: '#f1f5f9', borderRadius: '7px', overflow: 'hidden' }}>
+                              <div style={{
+                                width: `${pct}%`,
+                                height: '100%',
+                                backgroundColor: idx === 1 ? '#16a34a' : '#94a3b8'
+                              }}></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Confusion Matrix Heatmap */}
+                <div className="card">
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.25rem', color: '#0f172a' }}>
+                    2. Confusion Matrix Heatmap ({currentModelInfo?.name})
+                  </h3>
+                  <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>
+                    Evaluated on 2,466 test instances (80/20 test split).
+                  </p>
+
+                  {diagnostics?.confusion_matrix && (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', textAlign: 'center', fontSize: '0.8125rem' }}>
+                        <div></div>
+                        <div style={{ fontWeight: 600, color: '#475569', padding: '0.25rem' }}>Pred: Browsing (0)</div>
+                        <div style={{ fontWeight: 600, color: '#475569', padding: '0.25rem' }}>Pred: Purchase (1)</div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', fontWeight: 600, color: '#475569', fontSize: '0.75rem' }}>
+                          Actual 0
                         </div>
-                        <div style={{ width: '100%', height: '12px', backgroundColor: '#f1f5f9', borderRadius: '6px', overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${(item.average_charge / 35000) * 100}%`,
-                            height: '100%',
-                            backgroundColor: idx === 1 ? '#ef4444' : '#2563eb'
-                          }}></div>
+                        <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.375rem', padding: '0.75rem 0.5rem' }}>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e40af' }}>
+                            {diagnostics.confusion_matrix.tn.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#3b82f6' }}>True Negative (TN)</div>
+                        </div>
+                        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.375rem', padding: '0.75rem 0.5rem' }}>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#991b1b' }}>
+                            {diagnostics.confusion_matrix.fp.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#ef4444' }}>False Positive (FP)</div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', fontWeight: 600, color: '#475569', fontSize: '0.75rem' }}>
+                          Actual 1
+                        </div>
+                        <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '0.375rem', padding: '0.75rem 0.5rem' }}>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#9a3412' }}>
+                            {diagnostics.confusion_matrix.fn.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#f97316' }}>False Negative (FN)</div>
+                        </div>
+                        <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.375rem', padding: '0.75rem 0.5rem' }}>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#166534' }}>
+                            {diagnostics.confusion_matrix.tp.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#22c55e' }}>True Positive (TP)</div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
 
-            {/* Bottom Row: Actual vs Predicted Diagnostics */}
-            <div className="card">
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                3. Model Error Diagnostics: Actual vs. Predicted ({currentModelInfo?.name})
-              </h3>
-              <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>
-                Test data predictions plotted against actual charges. Closeness to the diagonal line indicates high fidelity.
-              </p>
-              
-              {diagnostics?.actual_vs_predicted && (
-                <div style={{ height: '220px', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '1rem', position: 'relative', backgroundColor: '#fafafa' }}>
-                  <svg style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                    {/* Diagonal reference line */}
-                    <line x1="0" y1="100%" x2="100%" y2="0" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 4" />
-                    
-                    {/* Scatter points */}
-                    {diagnostics.actual_vs_predicted.map((pt, i) => {
-                      const maxVal = 55000;
-                      const cx = `${Math.min(100, (pt.actual / maxVal) * 100)}%`;
-                      const cy = `${Math.max(0, 100 - (pt.predicted / maxVal) * 100)}%`;
-                      return (
-                        <circle
-                          key={i}
-                          cx={cx}
-                          cy={cy}
-                          r="4"
-                          fill="#2563eb"
-                          opacity="0.65"
-                        />
-                      );
-                    })}
-                  </svg>
-                </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                <span>$0</span>
-                <span style={{ color: '#ef4444' }}>Red Dashed: Ideal y = x Line</span>
-                <span>$55,000+</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 4: METHODOLOGY & VIVA STUDY GUIDE */}
-        {/* ========================================================================= */}
-        {activeTab === 'architecture' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div className="card">
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>
-                Academic Methodology & Viva Defense Guide
-              </h2>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
-                  <h4 style={{ fontWeight: 600, color: '#1e40af', marginBottom: '0.375rem' }}>
-                    Q1: How did we prevent Data Leakage?
-                  </h4>
-                  <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
-                    We applied strict 80/20 train-test splitting <strong>before</strong> feature scaling and one-hot encoding. Our <code className="mono">StandardScaler</code> and <code className="mono">OneHotEncoder</code> are fit on the training partition only and transform the test data during evaluation.
-                  </p>
-                </div>
-
-                <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
-                  <h4 style={{ fontWeight: 600, color: '#1e40af', marginBottom: '0.375rem' }}>
-                    Q2: Why did Polynomial Regression achieve R² = 0.8656 vs 0.7836?
-                  </h4>
-                  <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
-                    EDA showed that the effect of BMI on insurance charges depends conditionally on smoking status. Non-smokers have a flat slope, whereas smokers with BMI &gt; 30 experience an exponential jump. 2nd-degree polynomial features capture this interaction term (<code className="mono">BMI × Smoker</code>), increasing explained variance by 8.2%.
-                  </p>
-                </div>
-
-                <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
-                  <h4 style={{ fontWeight: 600, color: '#1e40af', marginBottom: '0.375rem' }}>
-                    Q3: What is the role of Ridge (L2) Regularization?
-                  </h4>
-                  <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
-                    Ridge adds a penalty ($\alpha \sum \beta_j^2$) to the loss function to shrink weights toward zero. This prevents multicollinearity and stabilizes higher-order polynomial coefficients.
-                  </p>
-                </div>
-
-                <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
-                  <h4 style={{ fontWeight: 600, color: '#1e40af', marginBottom: '0.375rem' }}>
-                    Q4: How does ModelBench connect ML to UI?
-                  </h4>
-                  <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
-                    The FastAPI backend acts as a thin integration wrapper over <code className="mono">ml_core/insurance_regression.py</code>. Pipelines are trained once at startup, allowing live What-If inference without retraining.
-                  </p>
+                      <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Specificity: {((diagnostics.confusion_matrix.tn / (diagnostics.confusion_matrix.tn + diagnostics.confusion_matrix.fp)) * 100).toFixed(1)}%</span>
+                        <span>Sensitivity (Recall): {((diagnostics.confusion_matrix.tp / (diagnostics.confusion_matrix.tp + diagnostics.confusion_matrix.fn)) * 100).toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+
           </div>
         )}
 
       </main>
 
-      {/* Footer */}
-      <footer style={{ backgroundColor: '#ffffff', borderTop: '1px solid var(--border)', padding: '1.25rem 0', marginTop: 'auto', fontSize: '0.8125rem', color: '#64748b' }}>
+      {/* Platform Footer */}
+      <footer style={{ backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0', padding: '1rem 0', marginTop: 'auto', fontSize: '0.8125rem', color: '#64748b' }}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div>ModelBench M.Tech Computing Lab (CS801) Project — NITK Surathkal</div>
-          <div>Built with Python, Scikit-Learn, FastAPI & React</div>
+          <div>ModelBench — Classical ML Empirical Benchmarking Platform</div>
+          <div>Python · Scikit-Learn · FastAPI · React</div>
         </div>
       </footer>
     </div>

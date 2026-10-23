@@ -6,15 +6,16 @@
 
 ## 📌 Project Overview
 
-ModelBench focuses primarily on the **empirical evaluation, diagnostic analysis, and comparative benchmarking of classical Machine Learning models** across curated, real-world datasets.
+ModelBench focuses on the **empirical evaluation, diagnostic analysis, and comparative benchmarking of classical Machine Learning models** across curated, real-world datasets of substantial scale (~10,000–17,000 observations):
 
-The project addresses the practical challenge of fragmented, ad-hoc experimentation in isolated notebooks by providing a consistent framework for:
-- Standardized data cleaning, feature encoding, and scaling.
-- Reproducible train/test data splitting.
-- Training and hyperparameter exploration across multiple algorithms.
-- Evaluation using task-appropriate statistical metrics ($R^2$, RMSE, MAE, Accuracy, F1-Score, ROC-AUC, etc.).
-- Diagnostic error visualizations (Residual plots, Actual vs. Predicted curves, Confusion Matrices).
-- Side-by-side comparative performance analysis on identical datasets.
+1. **Regression Benchmark:** *Bike Sharing Demand Dataset* (17,379 hourly observations) — Predicting urban rental demand (`cnt`) using weather, seasonal, and temporal interaction features.
+2. **Classification Benchmark:** *Online Shoppers Purchasing Intention Dataset* (12,330 user sessions) — Classifying transaction conversion (`Revenue`) from high-dimensional browsing session telemetry with real-world class imbalance (~84.5% non-purchasing vs ~15.5% purchasing).
+
+The platform enforces strict machine learning engineering practices:
+- Leak-free preprocessing via Scikit-Learn `ColumnTransformer` and `Pipeline` objects fit strictly on training splits.
+- Classical, non-tree algorithmic focus: Ordinary Least Squares (OLS), Ridge ($L_2$), Lasso ($L_1$), ElasticNet, Polynomial Feature Expansion ($d=2$), $K$-Nearest Neighbors (KNN), Gaussian Naive Bayes, and Support Vector Machines (Linear SVR / Linear SVC).
+- Comprehensive statistical evaluation: $R^2$, MAE, RMSE for regression; Accuracy, Precision, Recall, F1-Score, and ROC-AUC for classification.
+- Diagnostic visual analytics: Target distributions, Actual vs. Predicted scatter diagnostics ($y=x$ reference), and full 2×2 Confusion Matrix Heatmaps with Sensitivity/Specificity metrics.
 
 ---
 
@@ -34,24 +35,32 @@ The project addresses the practical challenge of fragmented, ad-hoc experimentat
 ```text
 ModelBench/
 │
-├── datasets/                     # Curated real-world CSV datasets (Insurance, Auto MPG, Housing, etc.)
+├── datasets/                     # Curated real-world benchmark datasets
+│   ├── bike_sharing.csv          # Hourly bike sharing demand (17,379 rows, Regression)
+│   └── online_shoppers.csv       # E-commerce browsing sessions (12,330 rows, Classification)
 │
-├── notebooks/                    # Jupyter notebooks for exploratory data analysis & model experiments
-│   ├── regression/               # Regression experiments (Linear, Multiple, Polynomial, Ridge)
-│   ├── classification/           # Classification experiments (Logistic, KNN, Trees, SVM)
-│   └── other/                    # Clustering and unsupervised learning experiments
+├── notebooks/                    # Jupyter notebooks with complete EDA, mathematics, & experiments
+│   ├── regression/
+│   │   └── 01_bike_sharing_regression.ipynb
+│   └── classification/
+│       └── 02_online_shoppers_classification.ipynb
 │
-├── ml_core/                      # Extracted, reusable Python ML functions and pipelines
+├── ml_core/                      # Production-ready, modular ML pipelines
+│   ├── bike_regression.py        # Bike sharing preprocessing & 7 regression models
+│   └── shoppers_classification.py# Shoppers preprocessing & 6 classification models
 │
-├── backend/                      # Lightweight application API layer (FastAPI)
+├── backend/                      # High-performance FastAPI application layer
+│   └── main.py                   # In-memory pipeline cache, prediction, and diagnostic endpoints
 │
-├── frontend/                     # Minimal interactive web dashboard (React / Plotly)
+├── frontend/                     # Interactive React + Vite web dashboard
+│   ├── src/
+│   │   ├── App.jsx               # Dynamic task-switching UI (Predict, Compare, Diagnostics)
+│   │   └── index.css             # Clean design system & styling
+│   └── package.json
 │
-├── docs/                         # Project reports, extended abstract (LaTeX), and presentation slides
-│
-├── .gitignore                    # Git ignore rules for Python, Jupyter, and IDE files
-├── README.md                     # Project overview and documentation
-└── requirements.txt              # Core Python dependencies
+├── docs/                         # Presentations, LaTeX reports, and viva preparation docs
+├── README.md                     # Project overview and instructions
+└── requirements.txt              # Python dependencies
 ```
 
 ---
@@ -59,20 +68,19 @@ ModelBench/
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-Ensure you have Python 3.10+ installed.
+Ensure you have Python 3.10+ and Node.js 18+ installed.
 
 ### 2. Environment Setup
 ```bash
-# Create a virtual environment
+# Create and activate virtual environment
 python -m venv .venv
 
-# Activate the virtual environment
 # On Windows:
 .venv\Scripts\activate
 # On Linux/macOS:
 source .venv/bin/activate
 
-# Install required dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 ```
 
@@ -85,26 +93,15 @@ python -m uvicorn backend.main:app --port 8000 --reload
 API Documentation & Swagger UI will be live at: `http://127.0.0.1:8000/docs`
 
 ### 4. Running the Frontend Dashboard
-The user interface connects directly to the FastAPI ML endpoints:
 ```bash
-# Navigate to frontend and start the Vite dev server:
 cd frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` in your browser to interact with live model predictions, comparative benchmark scorecards, and diagnostic plots.
+Open `http://localhost:5173` (or `http://localhost:3000`) in your browser to interact with live model predictions, comparative benchmark scorecards, and diagnostic plots.
 
 ### 5. Running Jupyter Notebooks
 ```bash
 jupyter notebook
 ```
-Navigate to `notebooks/regression/` to explore the complete step-by-step EDA, pipeline training, diagnostic plots, and viva study notes.
-
----
-
-## 🔬 Development Roadmap
-
-1. **Phase 1 (Abstract & Baseline Setup):** Dataset curation, EDA, and baseline regression experiments.
-2. **Phase 2 (Core Models & MidSem):** Multiple Linear, Polynomial, Ridge, and baseline classification models.
-3. **Phase 3 (Benchmarking & Tree/Ensemble Models):** Decision Trees, Random Forests, SVM, and comparative performance dashboard.
-4. **Phase 4 (Final Evaluation & Verification):** Interactive sensitivity analysis, comprehensive diagnostics, and final project reporting.
+Explore `notebooks/regression/01_bike_sharing_regression.ipynb` and `notebooks/classification/02_online_shoppers_classification.ipynb` for detailed exploratory data analysis, mathematical formulations, and step-by-step benchmark evaluations.

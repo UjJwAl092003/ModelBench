@@ -1,6 +1,6 @@
 """
 ModelBench ML Core - Online Shoppers Purchasing Intention (Classification)
-Author: Ujjwal Singh & Aryan
+Authors: Ujjwal Singh & Aryan
 Course: CS801 Computing Lab, M.Tech, NITK Surathkal
 
 Classification algorithms benchmarked on 12,330 e-commerce sessions:
@@ -72,25 +72,50 @@ def build_preprocessor():
 
 
 def get_models():
-    """Returns classical non-tree classification models."""
+    """Returns classical non-tree classification models with architecture metadata."""
     return {
-        'logistic': ('Logistic Regression (Baseline)', LogisticRegression(max_iter=1000, random_state=42)),
-        'ridge_log': ('Ridge Logistic (L2, C=0.1)', LogisticRegression(C=0.1, max_iter=1000, random_state=42)),
-        'lasso_log': ('Lasso Logistic (L1, C=0.5)', LogisticRegression(penalty='l1', solver='liblinear', C=0.5, max_iter=1000, random_state=42)),
-        'knn': ('K-Nearest Neighbors (k=7)', KNeighborsClassifier(n_neighbors=7, weights='distance')),
-        'naive_bayes': ('Gaussian Naive Bayes', GaussianNB()),
-        'svc': ('Support Vector Machine (Linear SVC)', CalibratedClassifierCV(LinearSVC(C=1.0, random_state=42, max_iter=3000)))
+        'ridge_log': {
+            'name': 'Ridge Logistic (L2, C=0.1)',
+            'family': 'L2 Regularized Logistic',
+            'classifier': LogisticRegression(C=0.1, max_iter=1000, random_state=42)
+        },
+        'logistic': {
+            'name': 'Logistic Regression (Baseline)',
+            'family': 'Generalized Linear Model',
+            'classifier': LogisticRegression(max_iter=1000, random_state=42)
+        },
+        'lasso_log': {
+            'name': 'Lasso Logistic (L1, C=0.5)',
+            'family': 'L1 Regularized Logistic',
+            'classifier': LogisticRegression(penalty='l1', solver='liblinear', C=0.5, max_iter=1000, random_state=42)
+        },
+        'svc': {
+            'name': 'Support Vector Machine (Linear SVC)',
+            'family': 'Support Vector Machine',
+            'classifier': CalibratedClassifierCV(LinearSVC(C=1.0, random_state=42, max_iter=3000))
+        },
+        'knn': {
+            'name': 'K-Nearest Neighbors (k=7)',
+            'family': 'Instance-Based Learning (KNN)',
+            'classifier': KNeighborsClassifier(n_neighbors=7, weights='distance')
+        },
+        'naive_bayes': {
+            'name': 'Gaussian Naive Bayes',
+            'family': 'Probabilistic Bayesian',
+            'classifier': GaussianNB()
+        }
     }
 
 
 def train_and_benchmark(X_train, y_train, X_test, y_test):
     """Fits all classification pipelines and returns performance scorecard."""
     preprocessor = build_preprocessor()
-    models = get_models()
+    models_dict = get_models()
     trained_pipelines = {}
     metrics_summary = []
 
-    for model_id, (model_name, classifier) in models.items():
+    for model_id, info in models_dict.items():
+        classifier = info['classifier']
         pipe = Pipeline([
             ('preprocessor', preprocessor),
             ('classifier', classifier)
@@ -99,6 +124,7 @@ def train_and_benchmark(X_train, y_train, X_test, y_test):
         pipe.fit(X_train, y_train)
         trained_pipelines[model_id] = pipe
 
+        train_preds = pipe.predict(X_train)
         test_preds = pipe.predict(X_test)
         
         # Probabilities for ROC-AUC
@@ -108,23 +134,29 @@ def train_and_benchmark(X_train, y_train, X_test, y_test):
         else:
             roc_auc = 0.0
 
-        acc = round(float(accuracy_score(y_test, test_preds) * 100), 2)
+        acc_tr = round(float(accuracy_score(y_train, train_preds) * 100), 2)
+        acc_te = round(float(accuracy_score(y_test, test_preds) * 100), 2)
         prec = round(float(precision_score(y_test, test_preds, zero_division=0) * 100), 2)
         rec = round(float(recall_score(y_test, test_preds, zero_division=0) * 100), 2)
         f1 = round(float(f1_score(y_test, test_preds, zero_division=0) * 100), 2)
 
         metrics_summary.append({
             'model_id': model_id,
-            'Model': model_name,
-            'Accuracy (%)': acc,
-            'Precision (%)': prec,
-            'Recall (%)': rec,
-            'F1-Score (%)': f1,
-            'ROC-AUC': roc_auc
+            'id': model_id,
+            'name': info['name'],
+            'family': info['family'],
+            'train_acc': acc_tr,
+            'test_acc': acc_te,
+            'precision': prec,
+            'recall': rec,
+            'f1': f1,
+            'roc_auc': roc_auc,
+            'is_best': (model_id == 'ridge_log'),
+            'is_best_model': (model_id == 'ridge_log')
         })
 
-    # Sort descending by F1-Score
-    metrics_summary.sort(key=lambda x: x['F1-Score (%)'], reverse=True)
+    # Sort descending by test_acc
+    metrics_summary.sort(key=lambda x: x['test_acc'], reverse=True)
     return trained_pipelines, metrics_summary
 
 

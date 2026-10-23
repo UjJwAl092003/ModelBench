@@ -3,7 +3,7 @@ ModelBench Backend API - FastAPI Application
 Authors: Ujjwal Singh & Aryan
 Course: CS801 Computing Lab, M.Tech, NITK Surathkal
 
-A lightweight integration backend serving two benchmark datasets:
+A robust ML integration backend serving two canonical datasets:
 1. Bike Sharing Demand (Regression - 17,379 rows)
 2. Online Shoppers Purchasing Intention (Classification - 12,330 rows)
 """
@@ -80,9 +80,9 @@ app.add_middleware(
 
 
 class PredictionPayload(BaseModel):
-    dataset_id: str
-    model_id: str
-    features: Dict[str, Any]
+    dataset_id: str = "bike_sharing"
+    model_id: str = ""
+    features: Dict[str, Any] = {}
 
 
 # =========================================================================
@@ -94,13 +94,15 @@ def health_check():
     return {
         "status": "healthy",
         "engine": "ModelBench Dual-Engine",
-        "datasets": ["bike_sharing", "online_shoppers"]
+        "datasets": ["bike_sharing", "online_shoppers"],
+        "bike_models": list(ML_STATE["bike"].get("pipelines", {}).keys()),
+        "shoppers_models": list(ML_STATE["shoppers"].get("pipelines", {}).keys())
     }
 
 
 @app.get("/api/datasets")
 def get_datasets():
-    """Returns catalog of both benchmark datasets."""
+    """Returns catalog of both benchmark datasets with human-readable schema."""
     return [
         {
             "id": "bike_sharing",
@@ -111,29 +113,7 @@ def get_datasets():
             "sample_count": 17379,
             "feature_count": 12,
             "description": "Predict hourly count of bicycle rentals in Washington D.C. based on weather, hour, and season.",
-            "default_model": "poly_ridge",
-            "features_schema": [
-                {"name": "hr", "label": "Hour of Day (0-23)", "type": "range", "min": 0, "max": 23, "default": 17, "unit": "hr"},
-                {"name": "temp", "label": "Normalized Temperature (0 to 1)", "type": "range", "min": 0.02, "max": 1.0, "step": 0.02, "default": 0.65, "unit": "norm"},
-                {"name": "hum", "label": "Humidity (0 to 1)", "type": "range", "min": 0.0, "max": 1.0, "step": 0.05, "default": 0.50, "unit": "norm"},
-                {"name": "windspeed", "label": "Wind Speed (0 to 1)", "type": "range", "min": 0.0, "max": 0.85, "step": 0.05, "default": 0.20, "unit": "norm"},
-                {"name": "season", "label": "Season", "type": "select", "options": [
-                    {"label": "Spring", "value": 1},
-                    {"label": "Summer", "value": 2},
-                    {"label": "Fall", "value": 3},
-                    {"label": "Winter", "value": 4}
-                ], "default": 3},
-                {"name": "workingday", "label": "Day Type", "type": "select", "options": [
-                    {"label": "Working Day (Mon-Fri)", "value": 1},
-                    {"label": "Weekend / Holiday", "value": 0}
-                ], "default": 1},
-                {"name": "weathersit", "label": "Weather Condition", "type": "select", "options": [
-                    {"label": "Clear / Few Clouds", "value": 1},
-                    {"label": "Mist / Cloudy", "value": 2},
-                    {"label": "Light Rain / Snow", "value": 3},
-                    {"label": "Heavy Rain / Ice Pellets", "value": 4}
-                ], "default": 1}
-            ]
+            "default_model": "poly_ridge"
         },
         {
             "id": "online_shoppers",
@@ -144,35 +124,14 @@ def get_datasets():
             "sample_count": 12330,
             "feature_count": 17,
             "description": "Classify whether an e-commerce visitor will make a purchase based on browsing session metrics.",
-            "default_model": "logistic",
-            "features_schema": [
-                {"name": "PageValues", "label": "Page Value Score", "type": "number", "min": 0.0, "max": 360.0, "step": 1.0, "default": 15.0, "unit": "pts"},
-                {"name": "ProductRelated", "label": "Product Pages Viewed", "type": "range", "min": 0, "max": 200, "default": 25, "unit": "pages"},
-                {"name": "ProductRelated_Duration", "label": "Product Browsing Time (sec)", "type": "number", "min": 0.0, "max": 6000.0, "step": 10.0, "default": 800.0, "unit": "s"},
-                {"name": "BounceRates", "label": "Bounce Rate", "type": "range", "min": 0.0, "max": 0.2, "step": 0.005, "default": 0.01, "unit": "rate"},
-                {"name": "ExitRates", "label": "Exit Rate", "type": "range", "min": 0.0, "max": 0.2, "step": 0.005, "default": 0.03, "unit": "rate"},
-                {"name": "VisitorType", "label": "Visitor Type", "type": "select", "options": [
-                    {"label": "Returning Visitor", "value": "Returning_Visitor"},
-                    {"label": "New Visitor", "value": "New_Visitor"}
-                ], "default": "Returning_Visitor"},
-                {"name": "Month", "label": "Month of Session", "type": "select", "options": [
-                    {"label": "November (Holiday Season)", "value": "Nov"},
-                    {"label": "May", "value": "May"},
-                    {"label": "March", "value": "Mar"},
-                    {"label": "December", "value": "Dec"}
-                ], "default": "Nov"},
-                {"name": "Weekend", "label": "Session on Weekend", "type": "select", "options": [
-                    {"label": "No (Weekday)", "value": 0},
-                    {"label": "Yes (Weekend)", "value": 1}
-                ], "default": 0}
-            ]
+            "default_model": "ridge_log"
         }
     ]
 
 
 @app.get("/api/datasets/{dataset_id}/models")
 def get_dataset_models(dataset_id: str):
-    """Returns the models evaluated on the chosen dataset."""
+    """Returns the benchmarked models and performance metrics for the chosen dataset."""
     if dataset_id == "bike_sharing":
         return ML_STATE["bike"].get("metrics", [])
     elif dataset_id == "online_shoppers":
@@ -183,82 +142,84 @@ def get_dataset_models(dataset_id: str):
 @app.post("/api/predict")
 def predict(payload: PredictionPayload):
     """Executes live model inference on submitted human-readable features."""
-    ds_id = payload.dataset_id
+    ds_id = payload.dataset_id if payload.dataset_id in ["bike_sharing", "online_shoppers"] else "bike_sharing"
     m_id = payload.model_id
-    features = payload.features
+    features = payload.features or {}
 
-    if ds_id == "bike_sharing":
-        state = ML_STATE["bike"]
-        pipelines = state.get("pipelines", {})
-        if m_id not in pipelines:
-            m_id = "poly_ridge"
-        pipe = pipelines[m_id]
+    try:
+        if ds_id == "bike_sharing":
+            state = ML_STATE["bike"]
+            pipelines = state.get("pipelines", {})
+            if not m_id or m_id not in pipelines:
+                m_id = "poly_ridge" if "poly_ridge" in pipelines else list(pipelines.keys())[0]
+            pipe = pipelines[m_id]
 
-        # Fill baseline defaults for unexposed features
-        full_feat = {
-            "season": int(features.get("season", 3)),
-            "yr": 1,
-            "mnth": int(features.get("mnth", 7)),
-            "hr": int(features.get("hr", 17)),
-            "holiday": 0,
-            "weekday": 4,
-            "workingday": int(features.get("workingday", 1)),
-            "weathersit": int(features.get("weathersit", 1)),
-            "temp": float(features.get("temp", 0.65)),
-            "atemp": float(features.get("temp", 0.65)),
-            "hum": float(features.get("hum", 0.50)),
-            "windspeed": float(features.get("windspeed", 0.20))
-        }
-        pred_bikes = bike_regression.predict_sample(pipe, full_feat)
-        return {
-            "status": "success",
-            "task_type": "Regression",
-            "dataset_id": ds_id,
-            "model_id": m_id,
-            "prediction": pred_bikes,
-            "formatted_result": f"{pred_bikes:,} bikes / hour",
-            "subtitle": f"Predicted hourly rental volume using {m_id.upper()}"
-        }
+            full_feat = {
+                "season": int(features.get("season", 3)),
+                "yr": 1,
+                "mnth": int(features.get("mnth", 7)),
+                "hr": int(features.get("hr", 17)),
+                "holiday": 0,
+                "weekday": 4,
+                "workingday": int(features.get("workingday", 1)),
+                "weathersit": int(features.get("weathersit", 1)),
+                "temp": float(features.get("temp", 0.65)),
+                "atemp": float(features.get("temp", 0.65)),
+                "hum": float(features.get("hum", 0.50)),
+                "windspeed": float(features.get("windspeed", 0.20))
+            }
+            pred_bikes = bike_regression.predict_sample(pipe, full_feat)
+            return {
+                "status": "success",
+                "task_type": "Regression",
+                "dataset_id": ds_id,
+                "model_id": m_id,
+                "prediction": pred_bikes,
+                "formatted_result": f"{pred_bikes:,} bikes / hour",
+                "subtitle": f"Estimated hourly rental volume ({m_id})"
+            }
 
-    elif ds_id == "online_shoppers":
-        state = ML_STATE["shoppers"]
-        pipelines = state.get("pipelines", {})
-        if m_id not in pipelines:
-            m_id = "logistic"
-        pipe = pipelines[m_id]
+        elif ds_id == "online_shoppers":
+            state = ML_STATE["shoppers"]
+            pipelines = state.get("pipelines", {})
+            if not m_id or m_id not in pipelines:
+                m_id = "ridge_log" if "ridge_log" in pipelines else list(pipelines.keys())[0]
+            pipe = pipelines[m_id]
 
-        # Fill baseline defaults for full feature vector
-        full_feat = {
-            "Administrative": int(features.get("Administrative", 1)),
-            "Administrative_Duration": float(features.get("Administrative_Duration", 20.0)),
-            "Informational": 0,
-            "Informational_Duration": 0.0,
-            "ProductRelated": int(features.get("ProductRelated", 25)),
-            "ProductRelated_Duration": float(features.get("ProductRelated_Duration", 800.0)),
-            "BounceRates": float(features.get("BounceRates", 0.01)),
-            "ExitRates": float(features.get("ExitRates", 0.03)),
-            "PageValues": float(features.get("PageValues", 15.0)),
-            "SpecialDay": 0.0,
-            "Month": str(features.get("Month", "Nov")),
-            "OperatingSystems": 2,
-            "Browser": 2,
-            "Region": 1,
-            "TrafficType": 2,
-            "VisitorType": str(features.get("VisitorType", "Returning_Visitor")),
-            "Weekend": int(features.get("Weekend", 0))
-        }
-        res = shoppers_classification.predict_sample(pipe, full_feat)
-        return {
-            "status": "success",
-            "task_type": "Classification",
-            "dataset_id": ds_id,
-            "model_id": m_id,
-            "prediction": res["prediction"],
-            "formatted_result": res["label"],
-            "purchase_probability": res["purchase_probability"],
-            "probability_percent": res["probability_percent"],
-            "subtitle": f"Probability of transaction: {res['probability_percent']}"
-        }
+            full_feat = {
+                "Administrative": int(features.get("Administrative", 1)),
+                "Administrative_Duration": float(features.get("Administrative_Duration", 20.0)),
+                "Informational": 0,
+                "Informational_Duration": 0.0,
+                "ProductRelated": int(features.get("ProductRelated", 25)),
+                "ProductRelated_Duration": float(features.get("ProductRelated_Duration", 800.0)),
+                "BounceRates": float(features.get("BounceRates", 0.01)),
+                "ExitRates": float(features.get("ExitRates", 0.03)),
+                "PageValues": float(features.get("PageValues", 15.0)),
+                "SpecialDay": 0.0,
+                "Month": str(features.get("Month", "Nov")),
+                "OperatingSystems": 2,
+                "Browser": 2,
+                "Region": 1,
+                "TrafficType": 2,
+                "VisitorType": str(features.get("VisitorType", "Returning_Visitor")),
+                "Weekend": int(features.get("Weekend", 0))
+            }
+            res = shoppers_classification.predict_sample(pipe, full_feat)
+            return {
+                "status": "success",
+                "task_type": "Classification",
+                "dataset_id": ds_id,
+                "model_id": m_id,
+                "prediction": res["prediction"],
+                "formatted_result": res["label"],
+                "purchase_probability": res["purchase_probability"],
+                "probability_percent": res["probability_percent"],
+                "subtitle": f"Probability of transaction: {res['probability_percent']}"
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     raise HTTPException(status_code=404, detail=f"Dataset '{ds_id}' not found.")
 
@@ -287,8 +248,8 @@ def get_diagnostics(dataset_id: str, model_id: str):
     if dataset_id == "bike_sharing":
         state = ML_STATE["bike"]
         pipelines = state.get("pipelines", {})
-        if model_id not in pipelines:
-            model_id = "poly_ridge"
+        if not model_id or model_id not in pipelines:
+            model_id = "poly_ridge" if "poly_ridge" in pipelines else list(pipelines.keys())[0]
         pipe = pipelines[model_id]
         X_test = state["X_test"]
         y_test = state["y_test"]
@@ -300,7 +261,7 @@ def get_diagnostics(dataset_id: str, model_id: str):
             "type": "scatter",
             "model_id": model_id,
             "points": [
-                {"actual": round(float(y_test.iloc[i]), 1), "predicted": round(float(preds[i]), 1)}
+                {"actual": round(float(y_test.iloc[i]), 1), "predicted": max(0.0, round(float(preds[i]), 1))}
                 for i in indices
             ]
         }
@@ -308,8 +269,8 @@ def get_diagnostics(dataset_id: str, model_id: str):
     elif dataset_id == "online_shoppers":
         state = ML_STATE["shoppers"]
         pipelines = state.get("pipelines", {})
-        if model_id not in pipelines:
-            model_id = "logistic"
+        if not model_id or model_id not in pipelines:
+            model_id = "ridge_log" if "ridge_log" in pipelines else list(pipelines.keys())[0]
         pipe = pipelines[model_id]
         X_test = state["X_test"]
         y_test = state["y_test"]

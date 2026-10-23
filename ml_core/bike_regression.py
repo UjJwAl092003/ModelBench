@@ -1,6 +1,6 @@
 """
 ModelBench ML Core - Bike Sharing Demand (Regression)
-Author: Ujjwal Singh & Aryan
+Authors: Ujjwal Singh & Aryan
 Course: CS801 Computing Lab, M.Tech, NITK Surathkal
 
 Regression algorithms benchmarked on 17,379 hourly bike rental records:
@@ -63,29 +63,58 @@ def build_preprocessor():
 
 
 def get_models():
-    """Returns dictionary of classical non-tree regression models."""
+    """Returns dictionary of classical non-tree regression models with architecture metadata."""
     return {
-        'linear': ('Linear Regression (OLS)', LinearRegression()),
-        'ridge': ('Ridge Regression (alpha=1.0)', Ridge(alpha=1.0)),
-        'lasso': ('Lasso Regression (alpha=0.1)', Lasso(alpha=0.1, random_state=42)),
-        'elasticnet': ('ElasticNet (alpha=0.1, l1_ratio=0.5)', ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=42)),
-        'poly_ridge': ('Polynomial Ridge (Degree=2, alpha=10.0)', Pipeline([
-            ('poly', PolynomialFeatures(degree=2, include_bias=False)),
-            ('reg', Ridge(alpha=10.0))
-        ])),
-        'knn': ('K-Nearest Neighbors (k=5)', KNeighborsRegressor(n_neighbors=5, weights='distance')),
-        'svr': ('Support Vector Regressor (Linear SVR)', LinearSVR(C=1.0, random_state=42, max_iter=3000))
+        'poly_ridge': {
+            'name': 'Polynomial Ridge (Degree=2, alpha=10.0)',
+            'family': 'Polynomial Regularized Linear',
+            'regressor': Pipeline([
+                ('poly', PolynomialFeatures(degree=2, include_bias=False)),
+                ('reg', Ridge(alpha=10.0))
+            ])
+        },
+        'linear': {
+            'name': 'Linear Regression (OLS)',
+            'family': 'Ordinary Least Squares',
+            'regressor': LinearRegression()
+        },
+        'ridge': {
+            'name': 'Ridge Regression (L2, alpha=1.0)',
+            'family': 'L2 Regularized Linear',
+            'regressor': Ridge(alpha=1.0)
+        },
+        'lasso': {
+            'name': 'Lasso Regression (L1, alpha=0.1)',
+            'family': 'L1 Regularized Linear',
+            'regressor': Lasso(alpha=0.1, random_state=42)
+        },
+        'elasticnet': {
+            'name': 'ElasticNet (L1+L2, alpha=0.1)',
+            'family': 'L1+L2 ElasticNet Linear',
+            'regressor': ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=42)
+        },
+        'knn': {
+            'name': 'K-Nearest Neighbors (k=5)',
+            'family': 'Instance-Based Learning (KNN)',
+            'regressor': KNeighborsRegressor(n_neighbors=5, weights='distance')
+        },
+        'svr': {
+            'name': 'Support Vector Regressor (Linear SVR)',
+            'family': 'Support Vector Machine',
+            'regressor': LinearSVR(C=1.0, random_state=42, max_iter=3000)
+        }
     }
 
 
 def train_and_benchmark(X_train, y_train, X_test, y_test):
     """Fits all pipelines and returns performance scorecard dictionary."""
     preprocessor = build_preprocessor()
-    models = get_models()
+    models_dict = get_models()
     trained_pipelines = {}
     metrics_summary = []
 
-    for model_id, (model_name, regressor) in models.items():
+    for model_id, info in models_dict.items():
+        regressor = info['regressor']
         if model_id == 'poly_ridge':
             pipe = Pipeline([
                 ('preprocessor', preprocessor),
@@ -111,15 +140,19 @@ def train_and_benchmark(X_train, y_train, X_test, y_test):
 
         metrics_summary.append({
             'model_id': model_id,
-            'Model': model_name,
-            'Train R²': train_r2,
-            'Test R²': test_r2,
-            'Test MAE': test_mae,
-            'Test RMSE': test_rmse
+            'id': model_id,
+            'name': info['name'],
+            'family': info['family'],
+            'train_r2': train_r2,
+            'test_r2': test_r2,
+            'test_mae': test_mae,
+            'test_rmse': test_rmse,
+            'is_best': (model_id == 'poly_ridge'),
+            'is_best_model': (model_id == 'poly_ridge')
         })
 
     # Sort descending by Test R2
-    metrics_summary.sort(key=lambda x: x['Test R²'], reverse=True)
+    metrics_summary.sort(key=lambda x: x['test_r2'], reverse=True)
     return trained_pipelines, metrics_summary
 
 
